@@ -335,47 +335,50 @@ async function loadProfile() {
     const deviceId = getDeviceId();
     const deviceInfo = navigator.userAgent.substring(0, 120);
 
+    // Busca todos os dispositivos aprovados para este usuário
+    const { data: approvedDevices } = await sb.from('device_requests')
+      .select('device_id')
+      .eq('user_id', currentUser.id)
+      .eq('status', 'approved');
+
+    const approvedIds = (approvedDevices||[]).map(d => d.device_id);
+
+    // Dispositivo atual é o principal ou está na lista de aprovados?
+    const isAuthorized = profile.device_id === deviceId || approvedIds.includes(deviceId);
+
     if (!profile.device_id) {
       // Primeiro acesso — registra automaticamente
       await sb.from('profiles').update({ device_id: deviceId }).eq('id', currentUser.id);
       profile.device_id = deviceId;
-    } else if (profile.device_id !== deviceId) {
-      // Dispositivo diferente — verifica se tem solicitação aprovada
-      const { data: req } = await sb.from('device_requests')
-        .select('*').eq('user_id', currentUser.id)
-        .eq('device_id', deviceId).eq('status', 'approved').maybeSingle();
+    } else if (!isAuthorized) {
+      // Dispositivo não autorizado — cria solicitação pendente se não existe
+      const { data: existing } = await sb.from('device_requests')
+        .select('id,status').eq('user_id', currentUser.id)
+        .eq('device_id', deviceId).maybeSingle();
 
-      if (req) {
-        // Aprovado — atualiza dispositivo principal
-        await sb.from('profiles').update({ device_id: deviceId }).eq('id', currentUser.id);
-        profile.device_id = deviceId;
-      } else {
-        // Cria solicitação pendente se ainda não existe
-        const { data: existing } = await sb.from('device_requests')
-          .select('id').eq('user_id', currentUser.id)
-          .eq('device_id', deviceId).maybeSingle();
-        if (!existing) {
-          await sb.from('device_requests').insert({
-            user_id: currentUser.id, email: profile.email,
-            name: profile.name, device_id: deviceId,
-            device_info: deviceInfo, status: 'pending'
-          });
-        }
-        document.getElementById('loading-screen').style.display = 'none';
-        document.getElementById('login-screen').style.display   = 'none';
-        document.getElementById('device-warning').style.display = 'flex';
-        document.getElementById('device-warning').innerHTML = `
-          <div class="device-card">
-            <div style="font-size:48px">🔒</div>
-            <h2>Novo dispositivo detectado</h2>
-            <p>Sua solicitação foi enviada ao administrador. Assim que ele aprovar, você acessa normalmente por este dispositivo.</p>
-            <p style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:8px">ID: ${deviceId}</p>
-            <button class="btn btn-outline" onclick="doLogout()" style="width:100%;justify-content:center;margin-top:16px;color:white;border-color:rgba(255,255,255,0.2)">Voltar ao login</button>
-          </div>`;
-        await sb.auth.signOut();
-        return;
+      if (!existing) {
+        await sb.from('device_requests').insert({
+          user_id: currentUser.id, email: profile.email,
+          name: profile.name, device_id: deviceId,
+          device_info: deviceInfo, status: 'pending'
+        });
       }
+
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('login-screen').style.display   = 'none';
+      document.getElementById('device-warning').style.display = 'flex';
+      document.getElementById('device-warning').innerHTML = `
+        <div class="device-card">
+          <div style="font-size:48px">🔒</div>
+          <h2>Novo dispositivo detectado</h2>
+          <p>Sua solicitação foi enviada ao administrador. Assim que ele aprovar, você acessa normalmente por este dispositivo — sem precisar solicitar novamente.</p>
+          <p style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:8px">ID: ${deviceId}</p>
+          <button class="btn btn-outline" onclick="doLogout()" style="width:100%;justify-content:center;margin-top:16px;color:white;border-color:rgba(255,255,255,0.2)">Voltar ao login</button>
+        </div>`;
+      await sb.auth.signOut();
+      return;
     }
+    // Se chegou aqui está autorizado — não precisa fazer nada
   }
 
   currentProfile = profile;
@@ -995,9 +998,10 @@ async function loadAdminClientsTable() {
 }
 
 async function renderAdminAcessos(c) {
-  const [{ data: profiles }, { data: requests }] = await Promise.all([
+  const [{ data: profiles }, { data: requests }, { data: allApproved }] = await Promise.all([
     sb.from('profiles').select('*').neq('role','admin'),
-    sb.from('device_requests').select('*').eq('status','pending').order('created_at',{ascending:false})
+    sb.from('device_requests').select('*').eq('status','pending').order('created_at',{ascending:false}),
+    sb.from('device_requests').select('*').eq('status','approved')
   ]);
 
   const pendentes = (requests||[]).length;
@@ -1025,28 +1029,41 @@ async function renderAdminAcessos(c) {
     </div>
   </div>`}
   <div class="table-card"><table>
-    <thead><tr><th>Cliente</th><th>E-mail</th><th>Dispositivo Autorizado</th><th>Status</th><th>Ação</th></tr></thead>
-    <tbody>${(profiles||[]).map(p=>`<tr>
-      <td><strong>${p.name}</strong></td><td>${p.email}</td>
-      <td><code style="font-size:10px;background:var(--gray-100);padding:2px 8px;border-radius:4px">${p.device_id||'Não registrado'}</code></td>
-      <td><span class="badge badge-${p.status==='active'?'green':'red'}">${p.status==='active'?'✅ Autorizado':'⛔ Bloqueado'}</span></td>
-      <td><button class="btn btn-sm btn-outline" onclick="adminResetDevice('${p.id}')">🔄 Resetar</button></td>
-    </tr>`).join('')}</tbody>
+    <thead><tr><th>Cliente</th><th>E-mail</th><th>Dispositivos Autorizados</th><th>Status</th><th>Ação</th></tr></thead>
+    <tbody>${(profiles||[]).map(p=>{
+      // Busca dispositivos aprovados deste cliente
+      const devs = (allApproved||[]).filter(d=>d.user_id===p.id);
+      const devList = [p.device_id, ...devs.map(d=>d.device_id)]
+        .filter((v,i,a)=>v&&a.indexOf(v)===i); // unique + sem null
+      return `<tr>
+        <td><strong>${p.name}</strong></td><td>${p.email}</td>
+        <td>${devList.length ? devList.map(d=>`<code style="font-size:10px;background:var(--gray-100);padding:2px 6px;border-radius:4px;display:inline-block;margin:1px">${d}</code>`).join(' ') : '<span style="color:var(--gray-400)">Nenhum</span>'}</td>
+        <td><span class="badge badge-${p.status==='active'?'green':'red'}">${p.status==='active'?'✅ Ativo':'⛔ Bloqueado'}</span></td>
+        <td><button class="btn btn-sm btn-danger" onclick="adminRevokeAllDevices('${p.id}')">🗑 Revogar todos</button></td>
+      </tr>`;
+    }).join('')}</tbody>
   </table></div>`;
 }
 
 async function approveDevice(reqId, userId, deviceId) {
-  // Atualiza solicitação para aprovada
+  // Apenas marca como aprovado — NÃO sobrescreve o device_id principal
+  // Assim todos os dispositivos aprovados ficam salvos na tabela device_requests
   await sb.from('device_requests').update({status:'approved'}).eq('id', reqId);
-  // Atualiza dispositivo principal do cliente
-  await sb.from('profiles').update({device_id: deviceId}).eq('id', userId);
-  showToast('✅ Dispositivo aprovado! Cliente já pode acessar.','success');
+  showToast('✅ Dispositivo aprovado! Cliente já pode acessar de qualquer dispositivo autorizado.','success');
   navigate('admin-acessos');
 }
 
 async function rejectDevice(reqId) {
   await sb.from('device_requests').update({status:'rejected'}).eq('id', reqId);
   showToast('❌ Solicitação recusada.','success');
+  navigate('admin-acessos');
+}
+
+async function adminRevokeAllDevices(userId) {
+  // Remove todos os dispositivos aprovados e reseta o device_id principal
+  await sb.from('device_requests').delete().eq('user_id', userId).eq('status','approved');
+  await sb.from('profiles').update({device_id: null}).eq('id', userId);
+  showToast('Todos os dispositivos revogados. Cliente precisará registrar novamente.','success');
   navigate('admin-acessos');
 }
 
