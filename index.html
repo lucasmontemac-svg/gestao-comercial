@@ -1000,15 +1000,47 @@ async function criarCliente() {
   const btn = document.getElementById('nc-btn');
   btn.disabled=true; btn.textContent='Criando...';
   const expiry = new Date(); expiry.setDate(expiry.getDate()+dias);
-  const { data, error } = await sb.auth.admin?.createUser ? 
-    await sb.auth.admin.createUser({email, password:senha, user_metadata:{name:nome, role:'client'}}) :
-    await sb.auth.signUp({email, password:senha, options:{data:{name:nome, role:'client'}}});
-  if (error) { showToast('Erro: '+error.message,'error'); btn.disabled=false; btn.textContent='✅ Criar Cliente'; return; }
-  if (data?.user) {
-    await sb.from('profiles').upsert({id:data.user.id, name:nome, email, role:'client', status:'active', loja, expiry_date:expiry.toISOString().split('T')[0]});
+
+  // Salva sessão atual do admin
+  const { data: adminSession } = await sb.auth.getSession();
+
+  // Cria o novo usuário
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password: senha,
+    options: { data: { name: nome, role: 'client' } }
+  });
+
+  if (error) {
+    showToast('Erro: ' + error.message, 'error');
+    btn.disabled=false; btn.textContent='✅ Criar Cliente';
+    return;
   }
+
+  if (data?.user) {
+    // Insere perfil manualmente
+    await sb.from('profiles').upsert({
+      id: data.user.id,
+      name: nome,
+      email,
+      role: 'client',
+      status: 'active',
+      loja,
+      plan: 'mensal',
+      expiry_date: expiry.toISOString().split('T')[0]
+    });
+
+    // Restaura sessão do admin
+    if (adminSession?.session) {
+      await sb.auth.setSession({
+        access_token: adminSession.session.access_token,
+        refresh_token: adminSession.session.refresh_token
+      });
+    }
+  }
+
   closeModal();
-  showToast('Cliente criado com sucesso!','success');
+  showToast('Cliente criado! Ele pode logar com o e-mail e senha cadastrados.', 'success');
   navigate('admin-clients');
 }
 
@@ -1036,4 +1068,3 @@ init();
 </script>
 </body>
 </html>
-
