@@ -510,20 +510,17 @@ async function renderEstoque(c) {
   const { data: produtos } = await sb.from('produtos').select('*').eq('user_id', currentUser.id).order('codigo');
   c.innerHTML = `
   <div class="table-card">
-    <div class="table-header"><h3>Produtos em Estoque</h3>
-      <button class="btn btn-primary btn-sm" onclick="openProdutoModal()">+ Novo Produto</button>
+    <div class="table-header">
+      <h3>Produtos em Estoque</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="busca-produto" placeholder="🔍 Buscar produto..." 
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:220px;"
+          oninput="filtrarProdutos(this.value)">
+        <button class="btn btn-primary btn-sm" onclick="openProdutoModal()">+ Novo Produto</button>
+      </div>
     </div>
-    <table><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Estoque</th><th>Margem</th></tr></thead>
-    <tbody>${(produtos||[]).map(p=>{
-      const mg=p.venda>0?((p.venda-p.custo)/p.venda*100):0;
-      return `<tr>
-        <td><strong>${p.codigo}</strong></td><td>${p.nome}</td>
-        <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
-        <td>R$ ${f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
-        <td class="${p.estoque<=3?'stock-low':'stock-ok'}" style="${p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${p.estoque} un.</td>
-        <td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td>
-      </tr>`;
-    }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>'}</tbody>
+    <table><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Estoque</th><th>Margem</th><th>Ações</th></tr></thead>
+    <tbody id="tbody-produtos">${renderProdutoRows(produtos||[])}</tbody>
     </table>
   </div>
   <div class="form-card">
@@ -538,6 +535,86 @@ async function renderEstoque(c) {
     </div>
     <div style="margin-top:16px"><button class="btn btn-success" onclick="registrarEntrada()">✅ Registrar Entrada</button></div>
   </div>`;
+}
+
+function renderProdutoRows(produtos) {
+  if (!produtos.length) return '<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>';
+  return produtos.map(p => {
+    const mg = p.venda>0?((p.venda-p.custo)/p.venda*100):0;
+    return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}">
+      <td><strong>${p.codigo}</strong></td><td>${p.nome}</td>
+      <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
+      <td>R$ ${f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
+      <td style="${p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${p.estoque} un.</td>
+      <td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td>
+      <td style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-outline" title="Editar" onclick='openEditProduto(${JSON.stringify(p)})'>✏️</button>
+        <button class="btn btn-sm btn-danger" title="Excluir" onclick="excluirProduto('${p.id}','${p.nome}')">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarProdutos(termo) {
+  const rows = document.querySelectorAll('#tbody-produtos tr[data-nome]');
+  const t = termo.toLowerCase();
+  rows.forEach(r => {
+    const match = r.dataset.nome.includes(t) || r.dataset.codigo.includes(t);
+    r.style.display = match ? '' : 'none';
+  });
+}
+
+function openEditProduto(p) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>✏️ Editar Produto</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Código</label><input type="text" id="ep-cod" value="${p.codigo}"></div>
+      <div class="form-group"><label>Nome</label><input type="text" id="ep-nome" value="${p.nome}"></div>
+      <div class="form-group"><label>Categoria</label><input type="text" id="ep-cat" value="${p.categoria||''}"></div>
+      <div class="form-group"><label>Custo Unitário (R$)</label><input type="number" id="ep-custo" value="${p.custo}"></div>
+      <div class="form-group"><label>Preço de Venda (R$)</label><input type="number" id="ep-venda" value="${p.venda}"></div>
+      <div class="form-group"><label>Estoque</label><input type="number" id="ep-estq" value="${p.estoque}"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" onclick="salvarEdicaoProduto('${p.id}')">💾 Salvar</button>
+    </div>`;
+  openModal();
+}
+
+async function salvarEdicaoProduto(id) {
+  const dados = {
+    codigo: document.getElementById('ep-cod').value.trim().toUpperCase(),
+    nome:   document.getElementById('ep-nome').value.trim(),
+    categoria: document.getElementById('ep-cat').value.trim(),
+    custo:  parseFloat(document.getElementById('ep-custo').value)||0,
+    venda:  parseFloat(document.getElementById('ep-venda').value)||0,
+    estoque: parseInt(document.getElementById('ep-estq').value)||0,
+  };
+  const { error } = await sb.from('produtos').update(dados).eq('id', id);
+  if (error) { showToast('Erro ao salvar','error'); return; }
+  closeModal();
+  showToast('Produto atualizado!','success');
+  navigate('estoque');
+}
+
+async function excluirProduto(id, nome) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>🗑 Excluir Produto</h3>
+    <p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">Tem certeza que deseja excluir <strong>${nome}</strong>? Esta ação não pode ser desfeita.</p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarExclusao('${id}')">🗑 Excluir</button>
+    </div>`;
+  openModal();
+}
+
+async function confirmarExclusao(id) {
+  const { error } = await sb.from('produtos').delete().eq('id', id);
+  if (error) { showToast('Erro ao excluir','error'); return; }
+  closeModal();
+  showToast('Produto excluído!','success');
+  navigate('estoque');
 }
 
 async function registrarEntrada() {
@@ -980,9 +1057,13 @@ async function renderAdminPlanos(c) {
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
     <div class="form-card">
       <h4 style="font-family:Sora;font-size:14px;font-weight:700;color:var(--navy);margin-bottom:16px">Resumo de Receita</h4>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px"><span>Clientes ativos</span><strong>${ativos}</strong></div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px"><span>Valor mensal</span><strong>R$ 97,00</strong></div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13px"><span>Receita mensal</span><strong style="color:var(--green)">R$ ${f(ativos*97)}</strong></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px"><span>Clientes ativos</span><strong>${ativos}</strong></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px">
+        <span>Valor mensal (R$)</span>
+        <input type="number" id="plan-price" value="97" min="0" style="width:100px;border:1px solid var(--gray-200);border-radius:6px;padding:5px 8px;font-size:13px;font-family:Inter,sans-serif;text-align:right;outline:none;" oninput="updatePlanRevenue(${ativos})">
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13px"><span>Receita mensal estimada</span><strong id="plan-revenue" style="color:var(--green)">R$ ${f(ativos*97)}</strong></div>
+      <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="showToast('Valor salvo!','success')">💾 Salvar valor</button></div>
     </div>
     <div class="form-card">
       <h4 style="font-family:Sora;font-size:14px;font-weight:700;color:var(--navy);margin-bottom:16px">Renovar Assinatura</h4>
@@ -1027,6 +1108,12 @@ async function adminRenew(id) {
   await sb.from('profiles').update({expiry_date:base.toISOString().split('T')[0],status:'active'}).eq('id',id);
   showToast('Assinatura renovada por 30 dias!','success');
   navigate('admin-clients');
+}
+
+function updatePlanRevenue(ativos) {
+  const price = parseFloat(document.getElementById('plan-price')?.value)||0;
+  const el = document.getElementById('plan-revenue');
+  if (el) el.textContent = 'R$ ' + (price*ativos).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
 async function adminRenewForm() {
