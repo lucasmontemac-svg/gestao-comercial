@@ -831,18 +831,31 @@ function atualizarSelecionados() {
 
   // Tags dos produtos selecionados
   const selDiv = document.getElementById('v-selecionados');
-  if (selDiv) selDiv.innerHTML = sel.map(p=>`
-    <span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">
-      ${p.codigo} — ${p.nome}
-      <span onclick="removerProdutoSelecionado('${p.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px;line-height:1" title="Remover">×</span>
-    </span>`).join('');
+  if (selDiv) selDiv.innerHTML = sel.map(function(p) {
+    return '<span style="display:inline-flex;align-items:center;gap:6px;background:#2E75B6;color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">'
+      + p.codigo + ' — ' + p.nome + ' (R$ ' + f(p.venda) + ')'
+      + '<span onclick="removerProdutoSelecionado(\'' + p.codigo + '\')" style="cursor:pointer;opacity:.7;font-size:14px;line-height:1" title="Remover">×</span></span>';
+  }).join('');
 
-  // Preview e total
-  let total = sel.reduce((a,p)=>a+Number(p.venda),0) * (1-desc/100);
+  // Subtotal sem desconto
+  const subtotal = sel.reduce(function(a,p){return a+Number(p.venda);},0);
+  const descVal  = subtotal * (desc/100);
+  const total    = subtotal * (1-desc/100);
+
   const prev = document.getElementById('v-preview');
   const tot  = document.getElementById('v-total');
-  if (prev) prev.textContent = sel.length ? '→ ' + sel.map(p=>p.nome+' (R$ '+f(p.venda)+')').join(' • ') : '';
-  if (tot)  tot.textContent  = total > 0 ? '💰 Total: R$ ' + f(total) : '';
+  if (prev) prev.textContent = '';
+  if (tot) {
+    if (sel.length === 0) {
+      tot.textContent = '';
+    } else if (desc > 0) {
+      tot.innerHTML = '<span style="color:#94A3B8;font-size:12px;text-decoration:line-through">R$ ' + f(subtotal) + '</span>'
+        + ' &nbsp;-' + desc + '%&nbsp; '
+        + '<span style="color:#22C55E;font-size:16px">💰 R$ ' + f(total) + '</span>';
+    } else {
+      tot.innerHTML = '<span style="color:#1E293B;font-size:16px">💰 Total: R$ ' + f(total) + '</span>';
+    }
+  }
 }
 
 function fecharSugestoes() {
@@ -879,24 +892,46 @@ function selecionarProdEdicao(codigo) {
   hiddenInput.value = atual.join(',');
   document.getElementById('ev-busca').value = '';
   document.getElementById('ev-sugestoes').style.display = 'none';
-  // Atualiza tags
+  atualizarTagsEdicao(atual, prods);
+  calcTotalEdicao();
+}
+
+function atualizarTagsEdicao(codes, prods) {
   const selDiv = document.getElementById('ev-selecionados');
-  if (selDiv) selDiv.innerHTML = atual.map(c => {
-    const pr = prods.find(x=>x.codigo===c);
-    return pr ? `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">${pr.codigo} — ${pr.nome}<span onclick="removerProdEdicao('${pr.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>` : '';
+  if (!selDiv) return;
+  selDiv.innerHTML = codes.map(function(c) {
+    const pr = prods.find(function(x){return x.codigo===c;});
+    if (!pr) return '';
+    return '<span style="display:inline-flex;align-items:center;gap:6px;background:#2E75B6;color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">'
+      + pr.codigo + ' — ' + pr.nome
+      + '<span onclick="removerProdEdicao(\'' + pr.codigo + '\')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>';
   }).join('');
+}
+
+function calcTotalEdicao() {
+  const prods = window._produtosVenda||[];
+  const hiddenInput = document.getElementById('ev-codigos');
+  const totalInput = document.getElementById('ev-total');
+  const descInput = document.getElementById('ev-desc');
+  if (!hiddenInput || !totalInput) return;
+  const codes = hiddenInput.value.split(',').map(s=>s.trim()).filter(Boolean);
+  const desc = parseFloat(descInput?.value)||0;
+  let total = 0;
+  codes.forEach(function(c) {
+    const pr = prods.find(function(x){return x.codigo===c;});
+    if (pr) total += Number(pr.venda);
+  });
+  total = total * (1 - desc/100);
+  totalInput.value = total.toFixed(2);
 }
 
 function removerProdEdicao(codigo) {
   const hiddenInput = document.getElementById('ev-codigos');
   const prods = window._produtosVenda||[];
-  const atual = hiddenInput.value.split(',').map(s=>s.trim()).filter(s=>s&&s!==codigo);
+  const atual = hiddenInput.value.split(',').map(s=>s.trim()).filter(function(s){return s&&s!==codigo;});
   hiddenInput.value = atual.join(',');
-  const selDiv = document.getElementById('ev-selecionados');
-  if (selDiv) selDiv.innerHTML = atual.map(c => {
-    const pr = prods.find(x=>x.codigo===c);
-    return pr ? `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">${pr.codigo} — ${pr.nome}<span onclick="removerProdEdicao('${pr.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>` : '';
-  }).join('');
+  atualizarTagsEdicao(atual, prods);
+  calcTotalEdicao();
 }
 
 function calcTotalVenda() {
@@ -917,7 +952,7 @@ function openEditVenda(id,cliente,tel,codigos,data,desc,total,status) {
       '<div id="ev-selecionados" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;min-height:10px"></div>',
       '<input type="hidden" id="ev-codigos" value="' + (codigos||'') + '">',
       '<div class="form-group"><label>Data</label><input type="date" id="ev-data" value="' + (data||'') + '"></div>',
-      '<div class="form-group"><label>Desconto %</label><input type="number" id="ev-desc" value="' + (desc||0) + '"></div>',
+      '<div class="form-group"><label>Desconto %</label><input type="number" id="ev-desc" value="' + (desc||0) + '" oninput="calcTotalEdicao()"></div>',
       '<div class="form-group"><label>Total (R$)</label><input type="number" id="ev-total" value="' + (total||0) + '"></div>',
       '<div class="form-group"><label>Status</label><select id="ev-status">',
         '<option value="pago"' + (status==='pago'?' selected':'') + '>✅ Pago</option>',
