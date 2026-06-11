@@ -510,7 +510,13 @@ async function renderDashboard(c) {
 }
 
 async function renderEstoque(c) {
-  const { data: produtos } = await sb.from('produtos').select('*').eq('user_id', currentUser.id).order('codigo');
+  const { data: produtosRaw } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
+  // Ordena numericamente: P1, P2, P3... P10, P11
+  const produtos = (produtosRaw||[]).sort((a,b) => {
+    const na = parseInt((a.codigo||'').replace(/[^0-9]/g,''))||0;
+    const nb = parseInt((b.codigo||'').replace(/[^0-9]/g,''))||0;
+    return na - nb;
+  });
   c.innerHTML = `
   <div class="table-card">
     <div class="table-header">
@@ -637,13 +643,13 @@ async function registrarEntrada() {
 async function openProdutoModal() {
   // Busca o último código para gerar o próximo automaticamente
   const { data: prods } = await sb.from('produtos').select('codigo').eq('user_id', currentUser.id);
-  let nextCode = 'P1';
+  let nextCode = '1';
   if (prods && prods.length > 0) {
     const nums = prods.map(p => {
       const n = parseInt((p.codigo||'').replace(/[^0-9]/g,''));
       return isNaN(n) ? 0 : n;
     });
-    nextCode = 'P' + (Math.max(...nums) + 1);
+    nextCode = String(Math.max(...nums) + 1);
   }
 
   document.getElementById('modal-body').innerHTML = `
