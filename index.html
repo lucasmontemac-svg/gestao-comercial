@@ -1695,7 +1695,7 @@ async function renderAdminDash(c) {
   <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
     <div class="kpi-card kpi-green"><span class="kpi-icon">👥</span><div class="kpi-label">Clientes Ativos</div><div class="kpi-value">${ativos}</div><div class="kpi-sub">de ${total} cadastrados</div></div>
     <div class="kpi-card kpi-red"><span class="kpi-icon">⛔</span><div class="kpi-label">Bloqueados</div><div class="kpi-value">${bloqueados}</div><div class="kpi-sub">Acesso suspenso</div></div>
-    <div class="kpi-card kpi-blue"><span class="kpi-icon">💰</span><div class="kpi-label">Receita Mensal Estimada</div><div class="kpi-value">R$ ${f(ativos*97)}</div><div class="kpi-sub">Assinaturas ativas × R$97</div></div>
+    <div class="kpi-card kpi-blue"><span class="kpi-icon">💰</span><div class="kpi-label">Receita Mensal Estimada</div><div class="kpi-value">R$ ${f((profiles||[]).filter(p=>p.status==='active').reduce((a,p)=>a+(Number(p.plan_value)||0),0))}</div><div class="kpi-sub">Soma dos planos ativos</div></div>
   </div>
   <div class="section-title">Clientes</div>
   <div class="table-card"><table>
