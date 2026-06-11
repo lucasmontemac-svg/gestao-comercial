@@ -658,6 +658,18 @@ async function renderDashboard(c) {
       <div class="kpi-label">Receita do Mês</div>
       <div class="kpi-value">R$ ${f(receitaMes)}</div>
       <div class="kpi-sub">${qtdMes} vendas realizadas</div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(34,197,94,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--gray-400);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Margem Bruta</span>
+          <span style="font-size:11px;font-weight:700;color:${receitaMes>0&&(receitaMes-cmv)>0?'var(--green-dim)':'var(--red)'}">
+            ${receitaMes>0?((receitaMes-cmv)/receitaMes*100).toFixed(1):0}%
+          </span>
+        </div>
+        <div style="font-size:16px;font-weight:800;font-family:Sora,sans-serif;color:${(receitaMes-cmv)>=0?'var(--green-dim)':'var(--red)'};margin-top:2px">
+          R$ ${f(receitaMes - cmv)}
+        </div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:1px">Receita − Custo Produtos</div>
+      </div>
     </div>
     <div class="kpi-card kpi-yellow"><span class="kpi-icon">⚠️</span>
       <div class="kpi-label">Estoque Baixo</div>
