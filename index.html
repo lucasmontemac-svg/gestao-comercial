@@ -634,11 +634,22 @@ async function registrarEntrada() {
   navigate('estoque');
 }
 
-function openProdutoModal() {
+async function openProdutoModal() {
+  // Busca o último código para gerar o próximo automaticamente
+  const { data: prods } = await sb.from('produtos').select('codigo').eq('user_id', currentUser.id);
+  let nextCode = 'P1';
+  if (prods && prods.length > 0) {
+    const nums = prods.map(p => {
+      const n = parseInt((p.codigo||'').replace(/[^0-9]/g,''));
+      return isNaN(n) ? 0 : n;
+    });
+    nextCode = 'P' + (Math.max(...nums) + 1);
+  }
+
   document.getElementById('modal-body').innerHTML = `
     <h3>+ Novo Produto</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Código</label><input type="text" id="np-cod" placeholder="Ex: P9"></div>
+      <div class="form-group"><label>Código (automático)</label><input type="text" id="np-cod" value="${nextCode}" style="background:var(--gray-100);font-weight:700;color:var(--blue)"></div>
       <div class="form-group"><label>Nome</label><input type="text" id="np-nome" placeholder="Nome do produto"></div>
       <div class="form-group"><label>Categoria</label><input type="text" id="np-cat" placeholder="Ex: Whey"></div>
       <div class="form-group"><label>Custo Unitário (R$)</label><input type="number" id="np-custo" placeholder="0,00"></div>
@@ -671,8 +682,9 @@ async function salvarProduto() {
 }
 
 async function renderVendas(c) {
-  const { data: produtos } = await sb.from('produtos').select('codigo,nome').eq('user_id',currentUser.id);
+  const { data: produtos } = await sb.from('produtos').select('codigo,nome,venda').eq('user_id',currentUser.id);
   const { data: vendas }   = await sb.from('vendas').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  const prodsB64 = btoa(unescape(encodeURIComponent(JSON.stringify(produtos||[]))));
   c.innerHTML = `
   <div class="form-card">
     <div class="section-title">Registrar Nova Venda</div>
@@ -683,33 +695,142 @@ async function renderVendas(c) {
         <select id="v-contato"><option>WhatsApp</option><option>Presencial</option><option>Instagram</option><option>Indicação</option></select>
       </div>
       <div class="form-group"><label>Data da Venda</label><input type="date" id="v-data" value="${new Date().toISOString().split('T')[0]}"></div>
-      <div class="form-group"><label>Desconto %</label><input type="number" id="v-desc" value="0" min="0" max="100"></div>
+      <div class="form-group"><label>Desconto %</label><input type="number" id="v-desc" value="0" min="0" max="100" oninput="calcTotalVenda()"></div>
       <div class="form-group"><label>Status</label>
         <select id="v-status"><option value="pago">✅ Pago</option><option value="pendente">⏳ Pendente</option></select>
       </div>
     </div>
     <div style="margin-top:16px">
       <div class="form-group"><label>Códigos dos Produtos (ex: P1,P3,P5)</label>
-        <input type="text" id="v-codigos" style="width:100%" placeholder="P1,P3,P5 — separe por vírgula" oninput="previewV(this.value,'${JSON.stringify(produtos||[]).replace(/'/g,"\\'")}')">
+        <input type="text" id="v-codigos" style="width:100%" placeholder="P1,P3,P5 — separe por vírgula" oninput="calcTotalVenda()">
       </div>
-      <div id="v-preview" style="margin-top:6px;font-size:12px;color:var(--blue);min-height:16px"></div>
-      <div id="v-total" style="margin-top:6px;font-size:13px;font-weight:700;color:var(--navy);min-height:16px"></div>
+      <div id="v-preview" style="margin-top:8px;font-size:12px;color:var(--blue);min-height:16px"></div>
+      <div id="v-total" style="margin-top:4px;font-size:14px;font-weight:700;color:var(--navy);min-height:20px"></div>
     </div>
-    <div style="margin-top:16px;display:flex;gap:10px">
-      <button class="btn btn-success" onclick="registrarVenda(${JSON.stringify(produtos||[]).replace(/"/g,'&quot;')})">✅ Registrar Venda</button>
+    <div style="margin-top:16px">
+      <button class="btn btn-success" onclick="registrarVenda()">✅ Registrar Venda</button>
     </div>
   </div>
   <div class="table-card">
-    <div class="table-header"><h3>Histórico de Vendas</h3></div>
-    <table><thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Status</th></tr></thead>
-    <tbody>${(vendas||[]).map(v=>`<tr>
-      <td><strong>${v.cliente||'—'}</strong></td><td>${v.codigos||'—'}</td>
-      <td>${v.data_venda||'—'}</td><td><strong>R$ ${f(v.total)}</strong></td>
-      <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
-    </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>'}</tbody>
+    <div class="table-header">
+      <h3>Histórico de Vendas</h3>
+      <input type="text" id="busca-venda" placeholder="🔍 Buscar cliente ou produto..."
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:260px;"
+        oninput="filtrarVendas(this.value)">
+    </div>
+    <table><thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Desc.</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody id="tbody-vendas">${renderVendasRows(vendas||[])}</tbody>
     </table>
   </div>`;
+
+  // Guarda produtos em variável global para uso nas funções
+  window._produtosVenda = produtos||[];
 }
+
+function renderVendasRows(vendas) {
+  if (!vendas.length) return '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>';
+  return vendas.map(v => {
+    const vStr = JSON.stringify(v).replace(/`/g,"'").replace(/\\/g,"\\");
+    return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-codigos="${(v.codigos||'').toLowerCase()}">
+      <td><strong>${v.cliente||'—'}</strong><br><small style="color:var(--gray-400)">${v.telefone||''}</small></td>
+      <td>${v.codigos||'—'}</td>
+      <td>${v.data_venda||'—'}</td>
+      <td><strong>R$ ${f(v.total)}</strong></td>
+      <td>${v.desconto>0?v.desconto+'%':'—'}</td>
+      <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
+      <td style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-outline" onclick="openEditVenda('${v.id}','${v.cliente||''}','${v.telefone||''}','${v.codigos||''}','${v.data_venda||''}',${v.desconto||0},${v.total||0},'${v.status}')">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="excluirVenda('${v.id}','${v.cliente||''}')">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarVendas(termo) {
+  const rows = document.querySelectorAll('#tbody-vendas tr[data-cliente]');
+  const t = termo.toLowerCase();
+  rows.forEach(r => {
+    r.style.display = (r.dataset.cliente.includes(t)||r.dataset.codigos.includes(t)) ? '' : 'none';
+  });
+}
+
+function calcTotalVenda() {
+  const codigos = (document.getElementById('v-codigos')?.value||'').toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
+  const desc = parseFloat(document.getElementById('v-desc')?.value)||0;
+  const prods = window._produtosVenda||[];
+  let total = 0;
+  const names = [];
+  codigos.forEach(c => {
+    const p = prods.find(x=>x.codigo===c);
+    if (p) { total += Number(p.venda); names.push(p.nome+' (R$ '+f(p.venda)+')'); }
+    else if (c) names.push(c+' (não encontrado)');
+  });
+  total = total * (1 - desc/100);
+  const prev = document.getElementById('v-preview');
+  const tot  = document.getElementById('v-total');
+  if (prev) prev.textContent = names.length ? '→ ' + names.join(' • ') : '';
+  if (tot)  tot.textContent  = total > 0 ? 'Total: R$ ' + f(total) : '';
+}
+
+function openEditVenda(id,cliente,tel,codigos,data,desc,total,status) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>✏️ Editar Venda</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Nome do Cliente</label><input type="text" id="ev-cliente" value="${cliente}"></div>
+      <div class="form-group"><label>Telefone</label><input type="text" id="ev-tel" value="${tel}"></div>
+      <div class="form-group"><label>Produtos (códigos)</label><input type="text" id="ev-codigos" value="${codigos}"></div>
+      <div class="form-group"><label>Data</label><input type="date" id="ev-data" value="${data}"></div>
+      <div class="form-group"><label>Desconto %</label><input type="number" id="ev-desc" value="${desc}"></div>
+      <div class="form-group"><label>Total (R$)</label><input type="number" id="ev-total" value="${total}"></div>
+      <div class="form-group"><label>Status</label>
+        <select id="ev-status">
+          <option value="pago" ${status==='pago'?'selected':''}>✅ Pago</option>
+          <option value="pendente" ${status==='pendente'?'selected':''}>⏳ Pendente</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" onclick="salvarEdicaoVenda('${id}')">💾 Salvar</button>
+    </div>`;
+  openModal();
+}
+
+async function salvarEdicaoVenda(id) {
+  const dados = {
+    cliente:    document.getElementById('ev-cliente').value.trim(),
+    telefone:   document.getElementById('ev-tel').value.trim(),
+    codigos:    document.getElementById('ev-codigos').value.trim().toUpperCase(),
+    data_venda: document.getElementById('ev-data').value,
+    desconto:   parseFloat(document.getElementById('ev-desc').value)||0,
+    total:      parseFloat(document.getElementById('ev-total').value)||0,
+    status:     document.getElementById('ev-status').value,
+  };
+  const { error } = await sb.from('vendas').update(dados).eq('id', id);
+  if (error) { showToast('Erro ao salvar','error'); return; }
+  closeModal();
+  showToast('Venda atualizada!','success');
+  navigate('vendas');
+}
+
+async function excluirVenda(id, cliente) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>🗑 Excluir Venda</h3>
+    <p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">Deseja excluir a venda de <strong>${cliente}</strong>? Esta ação não pode ser desfeita.</p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarExclusaoVenda('${id}')">🗑 Excluir</button>
+    </div>`;
+  openModal();
+}
+
+async function confirmarExclusaoVenda(id) {
+  await sb.from('vendas').delete().eq('id', id);
+  closeModal();
+  showToast('Venda excluída!','success');
+  navigate('vendas');
+}
+
 
 function previewV(val, produtosJson) {
   try {
@@ -723,7 +844,7 @@ function previewV(val, produtosJson) {
   } catch(e) {}
 }
 
-async function registrarVenda(produtos) {
+async function registrarVenda() {
   const codigos = document.getElementById('v-codigos').value.trim().toUpperCase();
   const cliente = document.getElementById('v-cliente').value.trim();
   const tel     = document.getElementById('v-tel').value.trim();
@@ -732,17 +853,23 @@ async function registrarVenda(produtos) {
   const desc    = parseFloat(document.getElementById('v-desc').value)||0;
   const status  = document.getElementById('v-status').value;
   if (!cliente || !codigos) { showToast('Informe o cliente e os produtos','error'); return; }
+  const produtos = window._produtosVenda||[];
   const codes = codigos.split(',').map(s=>s.trim()).filter(Boolean);
   let total = 0;
-  codes.forEach(c=>{const p=produtos.find(x=>x.codigo===c);if(p)total+=Number(p.venda);});
+  codes.forEach(c=>{ const p=produtos.find(x=>x.codigo===c); if(p) total+=Number(p.venda); });
   total = total * (1 - desc/100);
+  if (total === 0) {
+    // Tenta buscar preços direto do banco se não encontrou em memória
+    const { data: prods } = await sb.from('produtos').select('codigo,venda').eq('user_id',currentUser.id).in('codigo',codes);
+    (prods||[]).forEach(p=>{ total+=Number(p.venda); });
+    total = total * (1 - desc/100);
+  }
   const { error } = await sb.from('vendas').insert({
     user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data
   });
   if (error) { showToast('Erro ao registrar venda','error'); return; }
-  // Baixar estoque
   for (const cod of codes) {
-    const { data: p } = await sb.from('produtos').select('estoque').eq('user_id',currentUser.id).eq('codigo',cod).single();
+    const { data: p } = await sb.from('produtos').select('estoque').eq('user_id',currentUser.id).eq('codigo',cod).maybeSingle();
     if (p && p.estoque > 0) await sb.from('produtos').update({estoque:p.estoque-1}).eq('user_id',currentUser.id).eq('codigo',cod);
   }
   showToast('Venda registrada com sucesso!','success');
@@ -1241,4 +1368,3 @@ init();
 </script>
 </body>
 </html>
-
