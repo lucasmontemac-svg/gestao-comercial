@@ -974,6 +974,12 @@ async function renderVendas(c) {
       <div id="v-preview" style="margin-top:6px;font-size:12px;color:var(--blue);min-height:16px"></div>
       <div id="v-total" style="margin-top:4px;font-size:14px;font-weight:700;color:var(--navy);min-height:20px"></div>
     </div>
+    <div style="margin-top:12px">
+      <div class="form-group">
+        <label>Observação (opcional)</label>
+        <input type="text" id="v-obs" style="width:100%" placeholder="Ex: Placa veículo ABC-1234, entrega agendada...">
+      </div>
+    </div>
     <div style="margin-top:16px">
       <button class="btn btn-success" onclick="registrarVenda()">✅ Registrar Venda</button>
     </div>
@@ -985,7 +991,7 @@ async function renderVendas(c) {
         style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:260px;"
         oninput="filtrarVendas(this.value)">
     </div>
-    <table><thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Desc.</th><th>Status</th><th>Ações</th></tr></thead>
+    <table><thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Desc.</th><th>Observação</th><th>Status</th><th>Ações</th></tr></thead>
     <tbody id="tbody-vendas">${renderVendasRows(vendas||[])}</tbody>
     </table>
   </div>`;
@@ -1009,15 +1015,16 @@ function renderVendasRows(vendas) {
       return grouped[c]>1 ? grouped[c]+'x '+nome : nome;
     }).join(', ');
     const vStr = JSON.stringify(v).replace(/`/g,"'").replace(/\\/g,"\\");
-    return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-codigos="${(v.codigos||'').toLowerCase()}">
+    return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-codigos="${(v.codigos||'').toLowerCase()}" data-obs="${(v.observacao||'').toLowerCase()}">
       <td><strong>${v.cliente||'—'}</strong><br><small style="color:var(--gray-400)">${v.telefone||''}</small></td>
       <td style="font-size:12px;max-width:200px">${nomesStr||v.codigos||'—'}</td>
       <td>${v.data_venda||'—'}</td>
       <td><strong>R$ ${f(v.total)}</strong></td>
       <td>${v.desconto>0?v.desconto+'%':'—'}</td>
+      <td style="font-size:12px;color:var(--gray-600);max-width:150px">${v.observacao||'—'}</td>
       <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
       <td style="display:flex;gap:4px">
-        <button class="btn btn-sm btn-outline" onclick="openEditVenda('${v.id}','${v.cliente||''}','${v.telefone||''}','${v.codigos||''}','${v.data_venda||''}',${v.desconto||0},${v.total||0},'${v.status}')">✏️</button>
+        <button class="btn btn-sm btn-outline" onclick="openEditVenda('${v.id}','${v.cliente||''}','${v.telefone||''}','${v.codigos||''}','${v.data_venda||''}',${v.desconto||0},${v.total||0},'${v.status}','${(v.observacao||'')}')">✏️</button>
         <button class="btn btn-sm btn-danger" onclick="excluirVenda('${v.id}','${v.cliente||''}')">🗑</button>
       </td>
     </tr>`;
@@ -1028,7 +1035,8 @@ function filtrarVendas(termo) {
   const rows = document.querySelectorAll('#tbody-vendas tr[data-cliente]');
   const t = termo.toLowerCase();
   rows.forEach(r => {
-    r.style.display = (r.dataset.cliente.includes(t)||r.dataset.codigos.includes(t)) ? '' : 'none';
+    const match = (r.dataset.cliente||'').includes(t) || (r.dataset.codigos||'').includes(t) || (r.dataset.obs||'').includes(t);
+    r.style.display = match ? '' : 'none';
   });
 }
 
@@ -1242,11 +1250,17 @@ function removerProdEdicao(codigo) {
   calcTotalEdicao();
 }
 
+function filtrarResumo(termo) {
+  const rows = document.querySelectorAll('#tbody-resumo tr[data-nome]');
+  const t = termo.toLowerCase();
+  rows.forEach(r => { r.style.display = (r.dataset.nome||'').includes(t) ? '' : 'none'; });
+}
+
 function calcTotalVenda() {
   atualizarSelecionados();
 }
 
-function openEditVenda(id,cliente,tel,codigos,data,desc,total,status) {
+function openEditVenda(id,cliente,tel,codigos,data,desc,total,status,obs) {
   const html = [
     '<h3>✏️ Editar Venda</h3>',
     '<div class="form-grid">',
@@ -1266,6 +1280,7 @@ function openEditVenda(id,cliente,tel,codigos,data,desc,total,status) {
         '<option value="pago"' + (status==='pago'?' selected':'') + '>✅ Pago</option>',
         '<option value="pendente"' + (status==='pendente'?' selected':'') + '>⏳ Pendente</option>',
       '</select></div>',
+      '<div class="form-group" style="grid-column:1/-1"><label>Observação</label><input type="text" id="ev-obs" value="' + (obs||'') + '" placeholder="Ex: Placa veículo, entrega agendada..."></div>',
     '</div>',
     '<div class="modal-footer">',
       '<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>',
@@ -1300,6 +1315,7 @@ async function salvarEdicaoVenda(id) {
     desconto:   parseFloat(document.getElementById('ev-desc').value)||0,
     total:      parseFloat(document.getElementById('ev-total').value)||0,
     status:     document.getElementById('ev-status').value,
+    observacao: document.getElementById('ev-obs')?.value.trim()||'',
   };
   const { error } = await sb.from('vendas').update(dados).eq('id', id);
   if (error) { showToast('Erro ao salvar','error'); return; }
@@ -1351,8 +1367,9 @@ async function registrarVenda() {
   if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
   const codigos = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
   let total = sel.reduce((a,p)=>a+(Number(p.venda)*(p.qty||1)),0) * (1-desc/100);
+  const obs = document.getElementById('v-obs')?.value.trim()||'';
   const { error } = await sb.from('vendas').insert({
-    user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data
+    user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data, observacao:obs
   });
   if (error) { showToast('Erro ao registrar venda','error'); return; }
   for (const p of sel) {
@@ -1376,14 +1393,21 @@ async function renderResumo(c) {
     <div class="kpi-card kpi-blue"><div class="kpi-label">Custo Total</div><div class="kpi-value">R$ ${f(totalRec*0.69)}</div></div>
     <div class="kpi-card kpi-yellow"><div class="kpi-label">Lucro Bruto</div><div class="kpi-value">R$ ${f(totalRec*0.31)}</div></div>
   </div>
-  <div class="table-card"><table>
+  <div class="table-card">
+    <div class="table-header">
+      <h3>Resumo por Produto</h3>
+      <input type="text" id="busca-resumo" placeholder="🔍 Buscar produto..."
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:240px;"
+        oninput="filtrarResumo(this.value)">
+    </div>
+    <table>
     <thead><tr><th>Produto</th><th>Qtd Vendida</th><th>Receita</th><th>Custo</th><th>Lucro</th><th>Margem</th></tr></thead>
-    <tbody>${(produtos||[]).map(p=>{
+    <tbody id="tbody-resumo">${(produtos||[]).map(p=>{
       const codes=(vendas||[]).flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()));
       const qtd=codes.filter(c=>c===p.codigo.toUpperCase()).length;
       const rec=qtd*p.venda; const custo=qtd*p.custo; const luc=rec-custo;
       const mg=rec>0?(luc/rec*100):0;
-      return `<tr><td><strong>${p.nome}</strong></td><td>${qtd}</td><td>R$ ${f(rec)}</td><td>R$ ${f(custo)}</td>
+      return `<tr data-nome="${(p.nome||'').toLowerCase()}"><td><strong>${p.nome}</strong></td><td>${qtd}</td><td>R$ ${f(rec)}</td><td>R$ ${f(custo)}</td>
         <td>R$ ${f(luc)}</td><td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td></tr>`;
     }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum dado disponível</td></tr>'}</tbody>
   </table></div>`;
@@ -1394,7 +1418,7 @@ async function renderPrecos(c) {
   c.innerHTML = `
   <div class="table-card"><table>
     <thead><tr><th>Código</th><th>Produto</th><th>Custo</th><th>Preço Venda</th><th>Margem %</th><th>Lucro Un.</th><th>Status</th></tr></thead>
-    <tbody>${(produtos||[]).map(p=>{
+    <tbody id="tbody-resumo">${(produtos||[]).map(p=>{
       const mg=p.venda>0?((p.venda-p.custo)/p.venda*100):0;
       const luc=p.venda-p.custo;
       const rec=mg>=30?'✅ Ótima margem':mg>=20?'🟡 Margem OK':mg>=10?'⚠️ Margem baixa':'🔴 Revisar preço';
