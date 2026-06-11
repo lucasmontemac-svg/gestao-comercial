@@ -482,33 +482,180 @@ async function navigate(view) {
 // ══════════════════════════════════════════════════════
 async function renderDashboard(c) {
   const uid = currentUser.id;
-  const [{ data: vendas }, { data: produtos }] = await Promise.all([
-    sb.from('vendas').select('total,status').eq('user_id', uid),
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+  const inicioSemana = new Date(hoje - 7*24*60*60*1000).toISOString().split('T')[0];
+  const hojeStr = hoje.toISOString().split('T')[0];
+
+  const [{ data: vendas }, { data: produtos }, { data: despesas }] = await Promise.all([
+    sb.from('vendas').select('*').eq('user_id', uid),
     sb.from('produtos').select('*').eq('user_id', uid),
+    sb.from('despesas').select('*').eq('user_id', uid),
   ]);
-  const receita   = (vendas||[]).reduce((a,v)=>a+Number(v.total),0);
-  const qtdVendas = (vendas||[]).length;
-  const lucro     = receita * 0.31;
-  const baixo     = (produtos||[]).filter(p=>p.estoque<=3).length;
+
+  const todasVendas = vendas||[];
+  const todosProdutos = produtos||[];
+  const todasDespesas = despesas||[];
+
+  // ── Métricas base ──
+  const vendasMes    = todasVendas.filter(v => v.data_venda >= inicioMes);
+  const vendasSemana = todasVendas.filter(v => v.data_venda >= inicioSemana);
+  const vendasHoje   = todasVendas.filter(v => v.data_venda === hojeStr);
+
+  const receitaMes    = vendasMes.reduce((a,v)=>a+Number(v.total),0);
+  const receitaSemana = vendasSemana.reduce((a,v)=>a+Number(v.total),0);
+  const receitaHoje   = vendasHoje.reduce((a,v)=>a+Number(v.total),0);
+  const receitaTotal  = todasVendas.reduce((a,v)=>a+Number(v.total),0);
+
+  const qtdMes    = vendasMes.length;
+  const ticketMed = qtdMes > 0 ? receitaMes/qtdMes : 0;
+
+  const baixo  = todosProdutos.filter(p=>p.estoque<=3).length;
+  const pagas  = vendasMes.filter(v=>v.status==='pago').length;
+  const pend   = vendasMes.filter(v=>v.status==='pendente').length;
+  const valorPend = vendasMes.filter(v=>v.status==='pendente').reduce((a,v)=>a+Number(v.total),0);
+
+  // ── Estoque em valor ──
+  const estoqueValor = todosProdutos.reduce((a,p)=>a+Number(p.custo)*Number(p.estoque),0);
+  const cmv = todosProdutos.reduce((a,p)=>{
+    const codes = todasVendas.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()));
+    const qtdVend = codes.filter(c=>c===p.codigo.toUpperCase()).length;
+    return a + qtdVend * Number(p.custo);
+  },0);
+
+  // ── Despesas do mês ──
+  const despMes = todasDespesas.reduce((a,d)=>a+Number(d.valor),0);
+  const lucroLiq = receitaMes - cmv - despMes;
+  const pontoEq  = despMes > 0 && receitaMes > cmv ? despMes / (1 - (cmv/Math.max(receitaMes,1))) : 0;
+  const percDesp = receitaMes > 0 ? (despMes/receitaMes*100) : 0;
+
+  // ── Produto mais vendido ──
+  const contProd = {};
+  todasVendas.forEach(v => {
+    (v.codigos||'').split(',').forEach(c => {
+      const cod = c.trim().toUpperCase();
+      if (cod) contProd[cod] = (contProd[cod]||0) + 1;
+    });
+  });
+  const topProdCod = Object.keys(contProd).sort((a,b)=>contProd[b]-contProd[a])[0];
+  const topProd = topProdCod ? (todosProdutos.find(p=>p.codigo.toUpperCase()===topProdCod)||{nome:topProdCod}) : null;
+  const topProdQtd = topProdCod ? contProd[topProdCod] : 0;
+
+  // ── Cliente que mais comprou ──
+  const contCliente = {};
+  todasVendas.forEach(v => {
+    if (v.cliente) contCliente[v.cliente] = (contCliente[v.cliente]||0) + Number(v.total);
+  });
+  const topClienteNome = Object.keys(contCliente).sort((a,b)=>contCliente[b]-contCliente[a])[0];
+  const topClienteVal  = topClienteNome ? contCliente[topClienteNome] : 0;
 
   c.innerHTML = `
-  <div class="kpi-grid">
-    <div class="kpi-card kpi-green"><span class="kpi-icon">💵</span><div class="kpi-label">Receita Total</div><div class="kpi-value">R$ ${f(receita)}</div><div class="kpi-sub">Mês atual</div></div>
-    <div class="kpi-card kpi-blue"><span class="kpi-icon">📈</span><div class="kpi-label">Lucro Bruto</div><div class="kpi-value">R$ ${f(lucro)}</div><div class="kpi-sub">Margem ~31%</div></div>
-    <div class="kpi-card kpi-yellow"><span class="kpi-icon">🧾</span><div class="kpi-label">Vendas</div><div class="kpi-value">${qtdVendas}</div><div class="kpi-sub">Pedidos no mês</div></div>
-    <div class="kpi-card kpi-red"><span class="kpi-icon">⚠️</span><div class="kpi-label">Estoque Baixo</div><div class="kpi-value">${baixo}</div><div class="kpi-sub">Produtos críticos</div></div>
+  <!-- KPIs principais -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
+    <div class="kpi-card kpi-green"><span class="kpi-icon">💵</span>
+      <div class="kpi-label">Receita do Mês</div>
+      <div class="kpi-value">R$ ${f(receitaMes)}</div>
+      <div class="kpi-sub">${qtdMes} vendas realizadas</div>
+    </div>
+    <div class="kpi-card kpi-blue"><span class="kpi-icon">🎫</span>
+      <div class="kpi-label">Ticket Médio</div>
+      <div class="kpi-value">R$ ${f(ticketMed)}</div>
+      <div class="kpi-sub">Por venda no mês</div>
+    </div>
+    <div class="kpi-card kpi-yellow"><span class="kpi-icon">⚠️</span>
+      <div class="kpi-label">Estoque Baixo</div>
+      <div class="kpi-value">${baixo}</div>
+      <div class="kpi-sub">Produtos críticos</div>
+    </div>
+    <div class="kpi-card kpi-red"><span class="kpi-icon">⏳</span>
+      <div class="kpi-label">Inadimplência</div>
+      <div class="kpi-value">R$ ${f(valorPend)}</div>
+      <div class="kpi-sub">${pend} venda(s) pendente(s)</div>
+    </div>
   </div>
-  <div class="section-title">Últimas Vendas</div>
-  <div class="table-card"><table>
-    <thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Status</th></tr></thead>
-    <tbody>${(vendas||[]).slice(0,10).map(v=>`<tr>
-      <td>${v.cliente||'—'}</td><td>${v.codigos||'—'}</td><td>${v.data_venda||'—'}</td>
-      <td><strong>R$ ${f(v.total)}</strong></td>
-      <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
-    </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>'}</tbody>
-  </table></div>`;
-}
 
+  <!-- Vendas por período -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
+    <div class="kpi-card" style="border-left:4px solid #2E75B6">
+      <div class="kpi-label">📅 Hoje</div>
+      <div class="kpi-value" style="font-size:20px">R$ ${f(receitaHoje)}</div>
+      <div class="kpi-sub">${vendasHoje.length} venda(s)</div>
+    </div>
+    <div class="kpi-card" style="border-left:4px solid #22C55E">
+      <div class="kpi-label">📆 Últimos 7 dias</div>
+      <div class="kpi-value" style="font-size:20px">R$ ${f(receitaSemana)}</div>
+      <div class="kpi-sub">${vendasSemana.length} venda(s)</div>
+    </div>
+    <div class="kpi-card" style="border-left:4px solid #F59E0B">
+      <div class="kpi-label">🗓️ Total Geral</div>
+      <div class="kpi-value" style="font-size:20px">R$ ${f(receitaTotal)}</div>
+      <div class="kpi-sub">${todasVendas.length} venda(s) registradas</div>
+    </div>
+  </div>
+
+  <!-- Contábil -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
+    <div class="kpi-card" style="border-left:4px solid #EF4444">
+      <div class="kpi-label">📦 CMV (Custo Mercadoria)</div>
+      <div class="kpi-value" style="font-size:20px;color:var(--red)">R$ ${f(cmv)}</div>
+      <div class="kpi-sub">${receitaMes>0?(cmv/receitaMes*100).toFixed(1):0}% da receita</div>
+    </div>
+    <div class="kpi-card" style="border-left:4px solid #F59E0B">
+      <div class="kpi-label">🏠 Despesas Fixas Mês</div>
+      <div class="kpi-value" style="font-size:20px;color:var(--yellow)">R$ ${f(despMes)}</div>
+      <div class="kpi-sub">${percDesp.toFixed(1)}% da receita</div>
+    </div>
+    <div class="kpi-card" style="border-left:4px solid ${lucroLiq>=0?'#22C55E':'#EF4444'}">
+      <div class="kpi-label">💰 Lucro Líquido Est.</div>
+      <div class="kpi-value" style="font-size:20px;color:${lucroLiq>=0?'var(--green)':'var(--red)'}">R$ ${f(lucroLiq)}</div>
+      <div class="kpi-sub">Receita − CMV − Despesas</div>
+    </div>
+    <div class="kpi-card" style="border-left:4px solid #2E75B6">
+      <div class="kpi-label">⚖️ Ponto de Equilíbrio</div>
+      <div class="kpi-value" style="font-size:20px">R$ ${f(pontoEq)}</div>
+      <div class="kpi-sub">${receitaMes>=pontoEq&&pontoEq>0?'✅ Atingido':'⚠️ '+(pontoEq>0?'Faltam R$ '+f(pontoEq-receitaMes):'Cadastre despesas')}</div>
+    </div>
+  </div>
+
+  <!-- Destaques + Estoque -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="form-card" style="margin:0">
+      <div class="section-title">🏆 Produto Mais Vendido</div>
+      ${topProd ? `
+        <div style="font-size:22px;font-weight:800;font-family:Sora,sans-serif;color:var(--navy);margin:8px 0">${topProd.nome}</div>
+        <div style="font-size:13px;color:var(--gray-400)">${topProdQtd} unidade(s) vendida(s) no total</div>
+        <div style="margin-top:8px"><span class="badge badge-green">Código: ${topProdCod}</span></div>
+      ` : '<div style="color:var(--gray-400);font-size:13px">Nenhuma venda registrada</div>'}
+    </div>
+    <div class="form-card" style="margin:0">
+      <div class="section-title">👑 Cliente Top</div>
+      ${topClienteNome ? `
+        <div style="font-size:22px;font-weight:800;font-family:Sora,sans-serif;color:var(--navy);margin:8px 0">${topClienteNome}</div>
+        <div style="font-size:13px;color:var(--gray-400)">Total em compras</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green);margin-top:4px">R$ ${f(topClienteVal)}</div>
+      ` : '<div style="color:var(--gray-400);font-size:13px">Nenhuma venda registrada</div>'}
+    </div>
+    <div class="form-card" style="margin:0">
+      <div class="section-title">📦 Estoque em Valor</div>
+      <div style="font-size:22px;font-weight:800;font-family:Sora,sans-serif;color:var(--navy);margin:8px 0">R$ ${f(estoqueValor)}</div>
+      <div style="font-size:13px;color:var(--gray-400)">Capital investido em estoque</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--gray-400)">${todosProdutos.length} produto(s) cadastrado(s)</div>
+    </div>
+  </div>
+
+  <!-- Últimas Vendas -->
+  <div class="section-title">Últimas Vendas</div>
+  <div class="table-card">
+    <table>
+      <thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Status</th></tr></thead>
+      <tbody>${todasVendas.slice(0,8).map(v=>`<tr>
+        <td><strong>${v.cliente||'—'}</strong></td><td>${v.codigos||'—'}</td>
+        <td>${v.data_venda||'—'}</td><td><strong>R$ ${f(v.total)}</strong></td>
+        <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
+      </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
 async function renderEstoque(c) {
   const { data: produtosRaw } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
   // Ordena numericamente: P1, P2, P3... P10, P11
