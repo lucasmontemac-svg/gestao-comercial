@@ -850,6 +850,55 @@ function fecharSugestoes() {
   if (sug) sug.style.display = 'none';
 }
 
+function buscarProdutoEdicao(termo) {
+  const prods = window._produtosVenda||[];
+  const sug = document.getElementById('ev-sugestoes');
+  if (!sug || !termo.trim()) { if(sug) sug.style.display='none'; return; }
+  const busca = termo.trim().toLowerCase();
+  const encontrados = prods.filter(p =>
+    (p.codigo||'').toLowerCase().includes(busca) || (p.nome||'').toLowerCase().includes(busca)
+  );
+  if (!encontrados.length) { sug.style.display='none'; return; }
+  sug.innerHTML = encontrados.map(p=>`
+    <div onclick="selecionarProdEdicao('${p.codigo}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;font-size:13px"
+      onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">
+      <span><strong style="color:var(--blue)">${p.codigo}</strong> <span style="margin-left:8px">${p.nome}</span></span>
+      <span style="color:var(--green-dim);font-weight:600">R$ ${f(p.venda)}</span>
+    </div>`).join('');
+  sug.style.display='block';
+}
+
+function selecionarProdEdicao(codigo) {
+  const prods = window._produtosVenda||[];
+  const p = prods.find(x=>x.codigo===codigo);
+  if (!p) return;
+  const hiddenInput = document.getElementById('ev-codigos');
+  const atual = hiddenInput.value ? hiddenInput.value.split(',').map(s=>s.trim()).filter(Boolean) : [];
+  if (!atual.includes(codigo)) atual.push(codigo);
+  hiddenInput.value = atual.join(',');
+  document.getElementById('ev-busca').value = '';
+  document.getElementById('ev-sugestoes').style.display = 'none';
+  // Atualiza tags
+  const selDiv = document.getElementById('ev-selecionados');
+  if (selDiv) selDiv.innerHTML = atual.map(c => {
+    const pr = prods.find(x=>x.codigo===c);
+    return pr ? `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">${pr.codigo} — ${pr.nome}<span onclick="removerProdEdicao('${pr.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>` : '';
+  }).join('');
+}
+
+function removerProdEdicao(codigo) {
+  const hiddenInput = document.getElementById('ev-codigos');
+  const prods = window._produtosVenda||[];
+  const atual = hiddenInput.value.split(',').map(s=>s.trim()).filter(s=>s&&s!==codigo);
+  hiddenInput.value = atual.join(',');
+  const selDiv = document.getElementById('ev-selecionados');
+  if (selDiv) selDiv.innerHTML = atual.map(c => {
+    const pr = prods.find(x=>x.codigo===c);
+    return pr ? `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">${pr.codigo} — ${pr.nome}<span onclick="removerProdEdicao('${pr.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>` : '';
+  }).join('');
+}
+
 function calcTotalVenda() {
   atualizarSelecionados();
 }
@@ -860,7 +909,19 @@ function openEditVenda(id,cliente,tel,codigos,data,desc,total,status) {
     <div class="form-grid">
       <div class="form-group"><label>Nome do Cliente</label><input type="text" id="ev-cliente" value="${cliente}"></div>
       <div class="form-group"><label>Telefone</label><input type="text" id="ev-tel" value="${tel}"></div>
-      <div class="form-group"><label>Produtos (códigos)</label><input type="text" id="ev-codigos" value="${codigos}"></div>
+      <div class="form-group" style="position:relative">
+        <label>Buscar Produto (código ou nome)</label>
+        <input type="text" id="ev-busca" style="width:100%" placeholder="Digite código ou nome..." 
+          oninput="buscarProdutoEdicao(this.value)" autocomplete="off">
+        <div id="ev-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:200px;overflow-y:auto;margin-top:2px"></div>
+      </div>
+      <div id="ev-selecionados" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;min-height:10px">
+        ${codigos ? codigos.split(',').map(c=>{
+          const p=(window._produtosVenda||[]).find(x=>x.codigo===c.trim());
+          return p ? \`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">\${p.codigo} — \${p.nome}<span onclick="removerProdEdicao('\${p.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>\` : '';
+        }).join('') : ''}
+      </div>
+      <input type="hidden" id="ev-codigos" value="${codigos}">
       <div class="form-group"><label>Data</label><input type="date" id="ev-data" value="${data}"></div>
       <div class="form-group"><label>Desconto %</label><input type="number" id="ev-desc" value="${desc}"></div>
       <div class="form-group"><label>Total (R$)</label><input type="number" id="ev-total" value="${total}"></div>
@@ -1443,4 +1504,3 @@ init();
 </script>
 </body>
 </html>
-
