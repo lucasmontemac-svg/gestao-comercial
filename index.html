@@ -931,6 +931,7 @@ async function salvarProduto() {
 async function renderVendas(c) {
   const { data: produtos } = await sb.from('produtos').select('codigo,nome,venda').eq('user_id',currentUser.id);
   const { data: vendas }   = await sb.from('vendas').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  window._produtosVenda = produtos||[]; // garante que está atualizado
   const prodsB64 = btoa(unescape(encodeURIComponent(JSON.stringify(produtos||[]))));
   c.innerHTML = `
   <div class="form-card">
@@ -983,11 +984,22 @@ async function renderVendas(c) {
 
 function renderVendasRows(vendas) {
   if (!vendas.length) return '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>';
+  const prods = window._produtosVenda||[];
   return vendas.map(v => {
+    // Resolve códigos para nomes
+    const codes = (v.codigos||'').split(',').map(s=>s.trim()).filter(Boolean);
+    // Agrupa códigos repetidos em qty
+    const grouped = {};
+    codes.forEach(function(c){ grouped[c]=(grouped[c]||0)+1; });
+    const nomesStr = Object.keys(grouped).map(function(c){
+      const p = prods.find(function(x){return x.codigo===c;});
+      const nome = p ? p.nome : c;
+      return grouped[c]>1 ? grouped[c]+'x '+nome : nome;
+    }).join(', ');
     const vStr = JSON.stringify(v).replace(/`/g,"'").replace(/\\/g,"\\");
     return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-codigos="${(v.codigos||'').toLowerCase()}">
       <td><strong>${v.cliente||'—'}</strong><br><small style="color:var(--gray-400)">${v.telefone||''}</small></td>
-      <td>${v.codigos||'—'}</td>
+      <td style="font-size:12px;max-width:200px">${nomesStr||v.codigos||'—'}</td>
       <td>${v.data_venda||'—'}</td>
       <td><strong>R$ ${f(v.total)}</strong></td>
       <td>${v.desconto>0?v.desconto+'%':'—'}</td>
