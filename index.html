@@ -707,10 +707,17 @@ async function renderVendas(c) {
       </div>
     </div>
     <div style="margin-top:16px">
-      <div class="form-group"><label>Códigos dos Produtos (ex: P1,P3,P5)</label>
-        <input type="text" id="v-codigos" style="width:100%" placeholder="P1,P3,P5 — separe por vírgula" oninput="calcTotalVenda()">
+      <div class="form-group" style="position:relative">
+        <label>Buscar Produto (código ou nome) — separe múltiplos com vírgula</label>
+        <input type="text" id="v-codigos" style="width:100%" 
+          placeholder="Ex: 1 ou insane ou clow — digite e selecione" 
+          oninput="buscarProdutoVenda(this.value)" 
+          onkeydown="if(event.key==='Escape')fecharSugestoes()"
+          autocomplete="off">
+        <div id="v-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
-      <div id="v-preview" style="margin-top:8px;font-size:12px;color:var(--blue);min-height:16px"></div>
+      <div id="v-selecionados" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;min-height:10px"></div>
+      <div id="v-preview" style="margin-top:6px;font-size:12px;color:var(--blue);min-height:16px"></div>
       <div id="v-total" style="margin-top:4px;font-size:14px;font-weight:700;color:var(--navy);min-height:20px"></div>
     </div>
     <div style="margin-top:16px">
@@ -760,22 +767,91 @@ function filtrarVendas(termo) {
   });
 }
 
-function calcTotalVenda() {
-  const codigos = (document.getElementById('v-codigos')?.value||'').toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
-  const desc = parseFloat(document.getElementById('v-desc')?.value)||0;
+// Produtos selecionados para a venda atual
+window._produtosSelecionados = [];
+
+function buscarProdutoVenda(termo) {
   const prods = window._produtosVenda||[];
-  let total = 0;
-  const names = [];
-  codigos.forEach(c => {
-    const p = prods.find(x=>x.codigo===c);
-    if (p) { total += Number(p.venda); names.push(p.nome+' (R$ '+f(p.venda)+')'); }
-    else if (c) names.push(c+' (não encontrado)');
+  const sug = document.getElementById('v-sugestoes');
+  if (!termo.trim()) { sug.style.display='none'; return; }
+
+  // Pega o último termo digitado (após última vírgula)
+  const partes = termo.split(',');
+  const busca = partes[partes.length-1].trim().toLowerCase();
+  if (!busca) { sug.style.display='none'; return; }
+
+  // Filtra por código OU qualquer parte do nome
+  const encontrados = prods.filter(p => {
+    const cod  = (p.codigo||'').toLowerCase();
+    const nome = (p.nome||'').toLowerCase();
+    return cod.includes(busca) || nome.includes(busca);
   });
-  total = total * (1 - desc/100);
+
+  if (!encontrados.length) { sug.style.display='none'; return; }
+
+  sug.innerHTML = encontrados.map(p => `
+    <div onclick="selecionarProduto('${p.codigo}')" 
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;font-size:13px;transition:background .1s"
+      onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">
+      <div>
+        <strong style="color:var(--blue)">${p.codigo}</strong>
+        <span style="color:var(--gray-800);margin-left:8px">${p.nome}</span>
+      </div>
+      <span style="color:var(--green-dim);font-weight:600">R$ ${f(p.venda)}</span>
+    </div>`).join('');
+  sug.style.display = 'block';
+}
+
+function selecionarProduto(codigo) {
+  const prods = window._produtosVenda||[];
+  const p = prods.find(x=>x.codigo===codigo);
+  if (!p) return;
+
+  // Adiciona à lista se não estiver
+  if (!window._produtosSelecionados.find(x=>x.codigo===codigo)) {
+    window._produtosSelecionados.push(p);
+  }
+
+  // Fecha sugestões e limpa o campo de busca
+  fecharSugestoes();
+  document.getElementById('v-codigos').value = '';
+
+  // Atualiza exibição dos selecionados
+  atualizarSelecionados();
+}
+
+function removerProdutoSelecionado(codigo) {
+  window._produtosSelecionados = window._produtosSelecionados.filter(p=>p.codigo!==codigo);
+  atualizarSelecionados();
+}
+
+function atualizarSelecionados() {
+  const sel = window._produtosSelecionados;
+  const desc = parseFloat(document.getElementById('v-desc')?.value)||0;
+
+  // Tags dos produtos selecionados
+  const selDiv = document.getElementById('v-selecionados');
+  if (selDiv) selDiv.innerHTML = sel.map(p=>`
+    <span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">
+      ${p.codigo} — ${p.nome}
+      <span onclick="removerProdutoSelecionado('${p.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px;line-height:1" title="Remover">×</span>
+    </span>`).join('');
+
+  // Preview e total
+  let total = sel.reduce((a,p)=>a+Number(p.venda),0) * (1-desc/100);
   const prev = document.getElementById('v-preview');
   const tot  = document.getElementById('v-total');
-  if (prev) prev.textContent = names.length ? '→ ' + names.join(' • ') : '';
-  if (tot)  tot.textContent  = total > 0 ? 'Total: R$ ' + f(total) : '';
+  if (prev) prev.textContent = sel.length ? '→ ' + sel.map(p=>p.nome+' (R$ '+f(p.venda)+')').join(' • ') : '';
+  if (tot)  tot.textContent  = total > 0 ? '💰 Total: R$ ' + f(total) : '';
+}
+
+function fecharSugestoes() {
+  const sug = document.getElementById('v-sugestoes');
+  if (sug) sug.style.display = 'none';
+}
+
+function calcTotalVenda() {
+  atualizarSelecionados();
 }
 
 function openEditVenda(id,cliente,tel,codigos,data,desc,total,status) {
@@ -851,33 +927,26 @@ function previewV(val, produtosJson) {
 }
 
 async function registrarVenda() {
-  const codigos = document.getElementById('v-codigos').value.trim().toUpperCase();
+  const sel     = window._produtosSelecionados||[];
   const cliente = document.getElementById('v-cliente').value.trim();
   const tel     = document.getElementById('v-tel').value.trim();
   const contato = document.getElementById('v-contato').value;
   const data    = document.getElementById('v-data').value;
   const desc    = parseFloat(document.getElementById('v-desc').value)||0;
   const status  = document.getElementById('v-status').value;
-  if (!cliente || !codigos) { showToast('Informe o cliente e os produtos','error'); return; }
-  const produtos = window._produtosVenda||[];
-  const codes = codigos.split(',').map(s=>s.trim()).filter(Boolean);
-  let total = 0;
-  codes.forEach(c=>{ const p=produtos.find(x=>x.codigo===c); if(p) total+=Number(p.venda); });
-  total = total * (1 - desc/100);
-  if (total === 0) {
-    // Tenta buscar preços direto do banco se não encontrou em memória
-    const { data: prods } = await sb.from('produtos').select('codigo,venda').eq('user_id',currentUser.id).in('codigo',codes);
-    (prods||[]).forEach(p=>{ total+=Number(p.venda); });
-    total = total * (1 - desc/100);
-  }
+  if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
+  if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
+  const codigos = sel.map(p=>p.codigo).join(',');
+  let total = sel.reduce((a,p)=>a+Number(p.venda),0) * (1-desc/100);
   const { error } = await sb.from('vendas').insert({
     user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data
   });
   if (error) { showToast('Erro ao registrar venda','error'); return; }
-  for (const cod of codes) {
-    const { data: p } = await sb.from('produtos').select('estoque').eq('user_id',currentUser.id).eq('codigo',cod).maybeSingle();
-    if (p && p.estoque > 0) await sb.from('produtos').update({estoque:p.estoque-1}).eq('user_id',currentUser.id).eq('codigo',cod);
+  for (const p of sel) {
+    const { data: prod } = await sb.from('produtos').select('estoque').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
+    if (prod && prod.estoque > 0) await sb.from('produtos').update({estoque:prod.estoque-1}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
   }
+  window._produtosSelecionados = [];
   showToast('Venda registrada com sucesso!','success');
   navigate('vendas');
 }
