@@ -904,41 +904,44 @@ function calcTotalVenda() {
 }
 
 function openEditVenda(id,cliente,tel,codigos,data,desc,total,status) {
-  document.getElementById('modal-body').innerHTML = `
-    <h3>✏️ Editar Venda</h3>
-    <div class="form-grid">
-      <div class="form-group"><label>Nome do Cliente</label><input type="text" id="ev-cliente" value="${cliente}"></div>
-      <div class="form-group"><label>Telefone</label><input type="text" id="ev-tel" value="${tel}"></div>
-      <div class="form-group" style="position:relative">
-        <label>Buscar Produto (código ou nome)</label>
-        <input type="text" id="ev-busca" style="width:100%" placeholder="Digite código ou nome..." 
-          oninput="buscarProdutoEdicao(this.value)" autocomplete="off">
-        <div id="ev-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:200px;overflow-y:auto;margin-top:2px"></div>
-      </div>
-      <div id="ev-selecionados" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;min-height:10px">
-        ${codigos ? codigos.split(',').map(c=>{
-          const p=(window._produtosVenda||[]).find(x=>x.codigo===c.trim());
-          return p ? \`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--blue);color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">\${p.codigo} — \${p.nome}<span onclick="removerProdEdicao('\${p.codigo}')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>\` : '';
-        }).join('') : ''}
-      </div>
-      <input type="hidden" id="ev-codigos" value="${codigos}">
-      <div class="form-group"><label>Data</label><input type="date" id="ev-data" value="${data}"></div>
-      <div class="form-group"><label>Desconto %</label><input type="number" id="ev-desc" value="${desc}"></div>
-      <div class="form-group"><label>Total (R$)</label><input type="number" id="ev-total" value="${total}"></div>
-      <div class="form-group"><label>Status</label>
-        <select id="ev-status">
-          <option value="pago" ${status==='pago'?'selected':''}>✅ Pago</option>
-          <option value="pendente" ${status==='pendente'?'selected':''}>⏳ Pendente</option>
-        </select>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-success" onclick="salvarEdicaoVenda('${id}')">💾 Salvar</button>
-    </div>`;
+  document.getElementById('modal-body').innerHTML =
+    '<h3>✏️ Editar Venda</h3>' +
+    '<div class="form-grid">' +
+      '<div class="form-group"><label>Nome do Cliente</label><input type="text" id="ev-cliente" value="' + (cliente||'') + '"></div>' +
+      '<div class="form-group"><label>Telefone</label><input type="text" id="ev-tel" value="' + (tel||'') + '"></div>' +
+      '<div class="form-group" style="position:relative;grid-column:1/-1">' +
+        '<label>Buscar Produto (código ou nome)</label>' +
+        '<input type="text" id="ev-busca" style="width:100%" placeholder="Digite código ou nome..." oninput="buscarProdutoEdicao(this.value)" autocomplete="off">' +
+        '<div id="ev-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:200px;overflow-y:auto;margin-top:2px"></div>' +
+      '</div>' +
+      '<div id="ev-selecionados" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;min-height:10px"></div>' +
+      '<input type="hidden" id="ev-codigos" value="' + (codigos||'') + '">' +
+      '<div class="form-group"><label>Data</label><input type="date" id="ev-data" value="' + (data||'') + '"></div>' +
+      '<div class="form-group"><label>Desconto %</label><input type="number" id="ev-desc" value="' + (desc||0) + '"></div>' +
+      '<div class="form-group"><label>Total (R$)</label><input type="number" id="ev-total" value="' + (total||0) + '"></div>' +
+      '<div class="form-group"><label>Status</label>' +
+        '<select id="ev-status">' +
+          '<option value="pago"' + (status==='pago'?' selected':'') + '>✅ Pago</option>' +
+          '<option value="pendente"' + (status==='pendente'?' selected':'') + '>⏳ Pendente</option>' +
+        '</select>' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn btn-success" onclick="salvarEdicaoVenda('' + id + '')">💾 Salvar</button>' +
+    '</div>';
   openModal();
+  // Popula tags dos produtos já na venda
+  if (codigos) {
+    const prods = window._produtosVenda||[];
+    const codes = codigos.split(',').map(s=>s.trim()).filter(Boolean);
+    const selDiv = document.getElementById('ev-selecionados');
+    if (selDiv) selDiv.innerHTML = codes.map(c => {
+      const p = prods.find(x=>x.codigo===c);
+      return p ? '<span style="display:inline-flex;align-items:center;gap:6px;background:#2E75B6;color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">' + p.codigo + ' — ' + p.nome + '<span onclick="removerProdEdicao('' + p.codigo + '')" style="cursor:pointer;opacity:.7;font-size:14px">×</span></span>' : '';
+    }).join('');
+  }
 }
-
 async function salvarEdicaoVenda(id) {
   const dados = {
     cliente:    document.getElementById('ev-cliente').value.trim(),
