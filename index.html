@@ -144,6 +144,81 @@
   .empty-state{text-align:center;padding:48px 20px;color:var(--gray-400);}
   .empty-state .icon{font-size:40px;margin-bottom:12px;}
   .empty-state p{font-size:14px;}
+
+  /* ── MOBILE ──────────────────────────────────────────── */
+  @media(max-width:768px) {
+    /* Esconde sidebar, usa bottom nav */
+    .sidebar { display:none; }
+
+    /* App ocupa tela toda */
+    #app { height:100vh; }
+    .shell { flex-direction:column; height:100vh; }
+    .main { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+    .content { flex:1; overflow-y:auto; padding:16px; }
+
+    /* Topbar mobile */
+    .topbar { padding:0 16px; height:52px; }
+    .topbar-title { font-size:14px; }
+    .topbar-right { gap:8px; }
+    #topbar-user { display:none; }
+
+    /* Bottom navigation */
+    #bottom-nav {
+      display:flex !important;
+      position:fixed; bottom:0; left:0; right:0;
+      background:var(--navy); border-top:1px solid rgba(255,255,255,.1);
+      z-index:100; height:60px;
+    }
+    .bnav-item {
+      flex:1; display:flex; flex-direction:column; align-items:center;
+      justify-content:center; gap:2px; cursor:pointer;
+      color:rgba(255,255,255,.45); font-size:9px; font-weight:600;
+      letter-spacing:.3px; text-transform:uppercase; padding:4px 2px;
+      border-top:2px solid transparent; transition:all .15s;
+    }
+    .bnav-item .bnav-icon { font-size:18px; line-height:1; }
+    .bnav-item.active { color:var(--white); border-top-color:var(--blue); }
+
+    /* Padding bottom para não ficar atrás do bottom nav */
+    .content { padding-bottom:72px; }
+
+    /* KPI grids */
+    .kpi-grid { grid-template-columns:1fr 1fr !important; gap:10px !important; }
+    [style*="grid-template-columns:repeat(3"] { grid-template-columns:1fr 1fr !important; }
+    [style*="grid-template-columns:repeat(4"] { grid-template-columns:1fr 1fr !important; }
+
+    /* Cards e tabelas */
+    .kpi-card { padding:14px 12px; }
+    .kpi-value { font-size:20px !important; }
+    .form-card { padding:16px; }
+    .form-grid { grid-template-columns:1fr !important; gap:10px; }
+    .table-header { flex-direction:column; align-items:flex-start; gap:10px; }
+    .table-header input { width:100% !important; }
+
+    /* Tabelas — scroll horizontal */
+    .table-card { overflow-x:auto; }
+    table { min-width:600px; }
+
+    /* Modal */
+    .modal { width:95vw; padding:20px 16px; margin:8px; }
+    .modal .form-grid { grid-template-columns:1fr !important; }
+
+    /* Destaques grid */
+    [style*="grid-template-columns:1fr 1fr 1fr"] { grid-template-columns:1fr !important; }
+    [style*="grid-template-columns:1fr 1fr"] { grid-template-columns:1fr 1fr !important; }
+
+    /* Login */
+    .login-card { width:95vw; padding:28px 20px; }
+    .demo-btns { flex-direction:column; }
+  }
+
+  @media(max-width:400px) {
+    .kpi-grid { grid-template-columns:1fr !important; }
+    [style*="grid-template-columns:1fr 1fr"] { grid-template-columns:1fr !important; }
+  }
+
+  /* Esconde bottom nav no desktop */
+  #bottom-nav { display:none; }
 </style>
 </head>
 <body>
@@ -230,6 +305,33 @@
       </div>
       <div class="content" id="main-content"></div>
     </div>
+  </div>
+
+  <!-- BOTTOM NAV MOBILE -->
+  <div id="bottom-nav">
+    <div class="bnav-item active" id="bnav-dashboard" onclick="navigate('dashboard');setActiveNav('dashboard')">
+      <span class="bnav-icon">📊</span><span>Dashboard</span>
+    </div>
+    <div class="bnav-item" id="bnav-estoque" onclick="navigate('estoque');setActiveNav('estoque')">
+      <span class="bnav-icon">📦</span><span>Estoque</span>
+    </div>
+    <div class="bnav-item" id="bnav-vendas" onclick="navigate('vendas');setActiveNav('vendas')">
+      <span class="bnav-icon">🧾</span><span>Vendas</span>
+    </div>
+    <div class="bnav-item" id="bnav-resumo" onclick="navigate('resumo');setActiveNav('resumo')">
+      <span class="bnav-icon">💰</span><span>Resumo</span>
+    </div>
+    <div class="bnav-item" id="bnav-more" onclick="toggleMobileMenu()">
+      <span class="bnav-icon">☰</span><span>Mais</span>
+    </div>
+  </div>
+
+  <!-- MOBILE MENU (mais opções) -->
+  <div id="mobile-menu" style="display:none;position:fixed;bottom:60px;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,.1);z-index:99;padding:8px 0;">
+    <div onclick="navigate('precos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📈 Comparativo</div>
+    <div onclick="navigate('precif');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💲 Precificação</div>
+    <div onclick="navigate('despesas');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💸 Despesas</div>
+    <div onclick="doLogout()" style="padding:14px 20px;color:rgba(239,68,68,.8);font-size:14px;cursor:pointer">🚪 Sair</div>
   </div>
 </div>
 
@@ -946,17 +1048,22 @@ function selecionarProduto(codigo) {
   const p = prods.find(x=>x.codigo===codigo);
   if (!p) return;
 
-  // Adiciona à lista se não estiver
-  if (!window._produtosSelecionados.find(x=>x.codigo===codigo)) {
-    window._produtosSelecionados.push(p);
+  // Adiciona à lista com qty=1, ou incrementa se já existir
+  const exist = window._produtosSelecionados.find(x=>x.codigo===codigo);
+  if (exist) {
+    exist.qty = (exist.qty||1) + 1;
+  } else {
+    window._produtosSelecionados.push(Object.assign({}, p, {qty:1}));
   }
 
-  // Fecha sugestões e limpa o campo de busca
   fecharSugestoes();
   document.getElementById('v-codigos').value = '';
-
-  // Atualiza exibição dos selecionados
   atualizarSelecionados();
+}
+
+function atualizarQtyVenda(codigo, val) {
+  const p = window._produtosSelecionados.find(x=>x.codigo===codigo);
+  if (p) { p.qty = Math.max(1, parseInt(val)||1); atualizarSelecionados(); }
 }
 
 function removerProdutoSelecionado(codigo) {
@@ -968,31 +1075,39 @@ function atualizarSelecionados() {
   const sel = window._produtosSelecionados;
   const desc = parseFloat(document.getElementById('v-desc')?.value)||0;
 
-  // Tags dos produtos selecionados
   const selDiv = document.getElementById('v-selecionados');
   if (selDiv) selDiv.innerHTML = sel.map(function(p) {
-    return '<span style="display:inline-flex;align-items:center;gap:6px;background:#2E75B6;color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600">'
-      + p.codigo + ' — ' + p.nome + ' (R$ ' + f(p.venda) + ')'
-      + '<span onclick="removerProdutoSelecionado(\'' + p.codigo + '\')" style="cursor:pointer;opacity:.7;font-size:14px;line-height:1" title="Remover">×</span></span>';
+    const qty = p.qty||1;
+    const subtProd = Number(p.venda) * qty;
+    return '<div style="display:inline-flex;align-items:center;gap:6px;background:#1A3A5C;border-radius:10px;padding:6px 10px;margin:2px;font-size:12px">'
+      + '<span style="color:white;font-weight:600">' + p.codigo + ' — ' + p.nome + '</span>'
+      + '<span style="color:rgba(255,255,255,.6);font-size:11px">R$ ' + f(p.venda) + ' un.</span>'
+      + '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);border-radius:6px;padding:2px 6px">'
+      + '<span style="color:rgba(255,255,255,.6);font-size:10px">Qtd:</span>'
+      + '<input type="number" value="' + qty + '" min="1" '
+      + 'style="width:40px;background:transparent;border:none;color:white;font-size:12px;font-weight:700;text-align:center;outline:none" '
+      + 'onchange="atualizarQtyVenda(\'' + p.codigo + '\',this.value)">'
+      + '</div>'
+      + '<span style="color:#22C55E;font-size:11px;font-weight:600">= R$ ' + f(subtProd) + '</span>'
+      + '<span onclick="removerProdutoSelecionado(\'' + p.codigo + '\')" '
+      + 'style="color:rgba(255,255,255,.5);cursor:pointer;font-size:16px;line-height:1;padding:0 2px" title="Remover">×</span>'
+      + '</div>';
   }).join('');
 
-  // Subtotal sem desconto
-  const subtotal = sel.reduce(function(a,p){return a+Number(p.venda);},0);
-  const descVal  = subtotal * (desc/100);
+  const subtotal = sel.reduce(function(a,p){return a+(Number(p.venda)*(p.qty||1));},0);
   const total    = subtotal * (1-desc/100);
-
   const prev = document.getElementById('v-preview');
   const tot  = document.getElementById('v-total');
   if (prev) prev.textContent = '';
   if (tot) {
-    if (sel.length === 0) {
-      tot.textContent = '';
+    if (!sel.length) {
+      tot.innerHTML = '';
     } else if (desc > 0) {
       tot.innerHTML = '<span style="color:#94A3B8;font-size:12px;text-decoration:line-through">R$ ' + f(subtotal) + '</span>'
-        + ' &nbsp;-' + desc + '%&nbsp; '
-        + '<span style="color:#22C55E;font-size:16px">💰 R$ ' + f(total) + '</span>';
+        + '&nbsp; -' + desc + '%&nbsp; '
+        + '<span style="color:#22C55E;font-size:16px;font-weight:700">💰 R$ ' + f(total) + '</span>';
     } else {
-      tot.innerHTML = '<span style="color:#1E293B;font-size:16px">💰 Total: R$ ' + f(total) + '</span>';
+      tot.innerHTML = '<span style="color:#1E293B;font-size:16px;font-weight:700">💰 Total: R$ ' + f(total) + '</span>';
     }
   }
 }
@@ -1179,8 +1294,8 @@ async function registrarVenda() {
   const status  = document.getElementById('v-status').value;
   if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
   if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
-  const codigos = sel.map(p=>p.codigo).join(',');
-  let total = sel.reduce((a,p)=>a+Number(p.venda),0) * (1-desc/100);
+  const codigos = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
+  let total = sel.reduce((a,p)=>a+(Number(p.venda)*(p.qty||1)),0) * (1-desc/100);
   const { error } = await sb.from('vendas').insert({
     user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data
   });
@@ -1813,6 +1928,33 @@ document.getElementById('modal-overlay').addEventListener('click',function(e){if
 // ══════════════════════════════════════════════════════
 // START
 // ══════════════════════════════════════════════════════
+// ── MOBILE HELPERS ──────────────────────────────
+function setActiveNav(view) {
+  document.querySelectorAll('.bnav-item').forEach(function(b){ b.classList.remove('active'); });
+  const el = document.getElementById('bnav-' + view);
+  if (el) el.classList.add('active');
+}
+
+function toggleMobileMenu() {
+  const menu = document.getElementById('mobile-menu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('mobile-menu');
+  const btn  = document.getElementById('bnav-more');
+  if (menu && menu.style.display !== 'none' && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+
+// Sincroniza bottom nav ao navegar
+const _origNav = navigate;
+window.navigate = async function(view) {
+  await _origNav(view);
+  setActiveNav(view);
+};
+
 init();
 </script>
 </body>
