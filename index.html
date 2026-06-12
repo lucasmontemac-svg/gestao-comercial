@@ -774,10 +774,15 @@ async function renderEstoque(c) {
   <div class="table-card">
     <div class="table-header">
       <h3>Produtos em Estoque</h3>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="filtro-cat-estoque" onchange="filtrarEstoque()"
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;color:var(--gray-800);background:white">
+          <option value="">📂 Todas as categorias</option>
+          ${[...new Set((produtos||[]).map(p=>p.categoria).filter(Boolean))].sort().map(cat=>`<option value="${cat.toLowerCase()}">${cat}</option>`).join('')}
+        </select>
         <input type="text" id="busca-produto" placeholder="🔍 Buscar produto..." 
-          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:220px;"
-          oninput="filtrarProdutos(this.value)">
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:200px;"
+          oninput="filtrarEstoque()">
         <button class="btn btn-primary btn-sm" onclick="openProdutoModal()">+ Novo Produto</button>
       </div>
     </div>
@@ -803,7 +808,7 @@ function renderProdutoRows(produtos) {
   if (!produtos.length) return '<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>';
   return produtos.map(p => {
     const mg = p.venda>0?((p.venda-p.custo)/p.venda*100):0;
-    return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}">
+    return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}">
       <td><strong>${p.codigo}</strong></td><td>${p.nome}</td>
       <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
       <td>R$ ${f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
@@ -818,11 +823,17 @@ function renderProdutoRows(produtos) {
 }
 
 function filtrarProdutos(termo) {
-  const rows = document.querySelectorAll('#tbody-produtos tr[data-nome]');
-  const t = termo.toLowerCase();
+  filtrarEstoque();
+}
+
+function filtrarEstoque() {
+  const busca = (document.getElementById('busca-produto')?.value||'').toLowerCase();
+  const cat   = (document.getElementById('filtro-cat-estoque')?.value||'').toLowerCase();
+  const rows  = document.querySelectorAll('#tbody-produtos tr[data-nome]');
   rows.forEach(r => {
-    const match = r.dataset.nome.includes(t) || r.dataset.codigo.includes(t);
-    r.style.display = match ? '' : 'none';
+    const matchBusca = !busca || (r.dataset.nome||'').includes(busca) || (r.dataset.codigo||'').includes(busca);
+    const matchCat   = !cat   || (r.dataset.cat||'').toLowerCase().includes(cat);
+    r.style.display  = (matchBusca && matchCat) ? '' : 'none';
   });
 }
 
