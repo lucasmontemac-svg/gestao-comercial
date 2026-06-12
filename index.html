@@ -713,6 +713,9 @@ async function renderDashboard(c) {
     <div class="kpi-card" style="border-left:4px solid ${lucroLiq>=0?'#22C55E':'#EF4444'}">
       <div class="kpi-label">💰 Lucro Líquido Est.</div>
       <div class="kpi-value" style="font-size:20px;color:${lucroLiq>=0?'var(--green)':'var(--red)'}">R$ ${f(lucroLiq)}</div>
+      <div style="font-size:13px;font-weight:700;color:${lucroLiq>=0?'var(--green-dim)':'var(--red)'};margin:2px 0">
+        ${receitaMes>0?(lucroLiq/receitaMes*100).toFixed(1):0}% da receita
+      </div>
       <div class="kpi-sub">Receita − CMV − Despesas</div>
     </div>
     <div class="kpi-card" style="border-left:4px solid #2E75B6">
