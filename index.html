@@ -779,6 +779,7 @@ async function renderEstoque(c) {
     const nb = parseInt((b.codigo||'').replace(/[^0-9]/g,''))||0;
     return na - nb;
   });
+  window._produtosEstoque = produtos; // salva ANTES do render para export funcionar
   c.innerHTML = `
   <div class="table-card">
     <div class="table-header">
@@ -833,8 +834,18 @@ function renderProdutoRows(produtos) {
   }).join('');
 }
 
-function exportarEstoqueExcel() {
-  const prods = window._produtosEstoque||[];
+async function exportarEstoqueExcel() {
+  let prods = window._produtosEstoque||[];
+  if (!prods.length) {
+    const { data } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
+    prods = (data||[]).sort((a,b)=>{
+      const na=parseInt((a.codigo||'').replace(/[^0-9]/g,''))||0;
+      const nb=parseInt((b.codigo||'').replace(/[^0-9]/g,''))||0;
+      return na-nb;
+    });
+    window._produtosEstoque = prods;
+  }
+  if (!prods.length) { showToast('Nenhum produto cadastrado','error'); return; }
   const wb = XLSX.utils.book_new();
   const data = [['Código','Produto','Categoria','Custo Unit. (R$)','Preço Venda (R$)','Estoque','Valor em Estoque (R$)','Margem %']];
   prods.forEach(p => {
@@ -848,10 +859,20 @@ function exportarEstoqueExcel() {
   showToast('Excel exportado com sucesso!','success');
 }
 
-function exportarEstoquePDF() {
+async function exportarEstoquePDF() {
+  let prods = window._produtosEstoque||[];
+  if (!prods.length) {
+    const { data } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
+    prods = (data||[]).sort((a,b)=>{
+      const na=parseInt((a.codigo||'').replace(/[^0-9]/g,''))||0;
+      const nb=parseInt((b.codigo||'').replace(/[^0-9]/g,''))||0;
+      return na-nb;
+    });
+    window._produtosEstoque = prods;
+  }
+  if (!prods.length) { showToast('Nenhum produto cadastrado','error'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
-  const prods = window._produtosEstoque||[];
   const hoje = new Date().toLocaleDateString('pt-BR');
   const totalEstq = prods.reduce((a,p)=>a+Number(p.estoque)*Number(p.custo),0);
   const totalUn   = prods.reduce((a,p)=>a+Number(p.estoque),0);
@@ -1938,7 +1959,19 @@ function renderTabGiro(prods, vendas) {
 }
 
 // ── EXPORTAR EXCEL ─────────────────────────────────────────────
-function exportarExcel() {
+async function exportarExcel() {
+  // Garante dados carregados
+  if (!window._resumoProdutos?.length || !window._filteredVendas) {
+    const [{ data: v }, { data: p }, { data: d }] = await Promise.all([
+      sb.from('vendas').select('*').eq('user_id', currentUser.id),
+      sb.from('produtos').select('*').eq('user_id', currentUser.id),
+      sb.from('despesas').select('*').eq('user_id', currentUser.id),
+    ]);
+    window._resumoVendas = v||[]; window._resumoProdutos = p||[]; window._resumoDespesas = d||[];
+    window._filteredVendas = v||[]; window._filteredDesps = d||[];
+    window._filteredReceita = (v||[]).reduce((a,x)=>a+Number(x.total),0);
+    window._filteredCusto = 0;
+  }
   const tab = document.querySelector('.resumo-tab.active')?.id?.replace('tab-','')||'produtos';
   const wb  = XLSX.utils.book_new();
 
@@ -2014,7 +2047,21 @@ function exportarExcel() {
 }
 
 // ── EXPORTAR PDF ────────────────────────────────────────────────
-function exportarPDF() {
+async function exportarPDF() {
+  if (!window._resumoProdutos?.length || !window._filteredVendas) {
+    const [{ data: v }, { data: p }, { data: d }] = await Promise.all([
+      sb.from('vendas').select('*').eq('user_id', currentUser.id),
+      sb.from('produtos').select('*').eq('user_id', currentUser.id),
+      sb.from('despesas').select('*').eq('user_id', currentUser.id),
+    ]);
+    window._resumoVendas   = v||[];
+    window._resumoProdutos = p||[];
+    window._resumoDespesas = d||[];
+    window._filteredVendas  = v||[];
+    window._filteredDesps   = d||[];
+    window._filteredReceita = (v||[]).reduce((a,x)=>a+Number(x.total),0);
+    window._filteredCusto   = 0;
+  }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
   const vendas  = window._filteredVendas||[];
