@@ -679,7 +679,10 @@ async function renderDashboard(c) {
     <div class="kpi-card kpi-blue"><span class="kpi-icon">📦</span>
       <div class="kpi-label">Estoque em Valor</div>
       <div class="kpi-value">R$ ${f(estoqueValor)}</div>
-      <div class="kpi-sub">Capital investido parado</div>
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin:2px 0">
+        ${todosProdutos.length} produto(s) • ${todosProdutos.reduce((a,p)=>a+Number(p.estoque),0)} un. total
+      </div>
+      <div class="kpi-sub">${baixo>0?`⚠️ ${baixo} produto(s) com estoque crítico`:'✅ Estoque saudável'}</div>
     </div>
   </div>
 
