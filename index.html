@@ -2779,12 +2779,16 @@ async function renderDespesas(c) {
     <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarDespesa()">+ Adicionar</button></div>
   </div>
   <div class="table-card"><table>
-    <thead><tr><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Categoria</th><th>Status</th><th>Ação</th></tr></thead>
+    <thead><tr><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Categoria</th><th>Status</th><th>Ações</th></tr></thead>
     <tbody>${(despesas||[]).map(d=>`<tr>
       <td>${d.descricao}</td><td>R$ ${f(d.valor)}</td><td>${d.vencimento||'—'}</td>
       <td><span class="badge badge-blue">${d.categoria}</span></td>
       <td><span class="badge badge-${d.status==='pago'?'green':'yellow'}">${d.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
-      <td><button class="btn btn-sm btn-outline" onclick="toggleDespesa('${d.id}','${d.status}')">${d.status==='pago'?'Desfazer':'✅ Pagar'}</button></td>
+      <td style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-outline" onclick="toggleDespesa('${d.id}','${d.status}')" title="${d.status==='pago'?'Desfazer pagamento':'Marcar como pago'}">${d.status==='pago'?'↩ Desfazer':'✅ Pagar'}</button>
+        <button class="btn btn-sm btn-outline" onclick="openEditDespesa('${d.id}','${d.descricao}',${d.valor},'${d.vencimento||''}','${d.categoria}','${d.status}')" title="Editar">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="excluirDespesa('${d.id}','${d.descricao}')" title="Excluir">🗑</button>
+      </td>
     </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma despesa registrada</td></tr>'}</tbody>
   </table></div>`;
 }
@@ -2801,6 +2805,70 @@ async function toggleDespesa(id, status) {
   const novo = status==='pago'?'pendente':'pago';
   await sb.from('despesas').update({status:novo}).eq('id',id);
   navigate('despesas');
+}
+
+function openEditDespesa(id, descricao, valor, vencimento, categoria, status) {
+  document.getElementById('modal-body').innerHTML = [
+    '<h3>✏️ Editar Despesa</h3>',
+    '<div class="form-grid">',
+      '<div class="form-group"><label>Descrição</label><input type="text" id="ed-desc" value="' + descricao + '"></div>',
+      '<div class="form-group"><label>Valor (R$)</label><input type="number" id="ed-val" value="' + valor + '" min="0"></div>',
+      '<div class="form-group"><label>Vencimento</label><input type="date" id="ed-venc" value="' + vencimento + '"></div>',
+      '<div class="form-group"><label>Categoria</label>',
+        '<select id="ed-cat">',
+          '<option value="Fixo"' + (categoria==='Fixo'?' selected':'') + '>Fixo</option>',
+          '<option value="Variável"' + (categoria==='Variável'?' selected':'') + '>Variável</option>',
+          '<option value="Eventual"' + (categoria==='Eventual'?' selected':'') + '>Eventual</option>',
+        '</select>',
+      '</div>',
+      '<div class="form-group"><label>Status</label>',
+        '<select id="ed-status">',
+          '<option value="pago"' + (status==='pago'?' selected':'') + '>✅ Pago</option>',
+          '<option value="pendente"' + (status==='pendente'?' selected':'') + '>⏳ Pendente</option>',
+        '</select>',
+      '</div>',
+    '</div>',
+    '<div class="modal-footer">',
+      '<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>',
+      '<button class="btn btn-success" id="ed-save-btn">💾 Salvar</button>',
+    '</div>'
+  ].join('');
+  document.getElementById('ed-save-btn').addEventListener('click', function(){ salvarEdicaoDespesa(id); });
+  openModal();
+}
+
+async function salvarEdicaoDespesa(id) {
+  const dados = {
+    descricao:  document.getElementById('ed-desc').value.trim(),
+    valor:      parseFloat(document.getElementById('ed-val').value)||0,
+    vencimento: document.getElementById('ed-venc').value||null,
+    categoria:  document.getElementById('ed-cat').value,
+    status:     document.getElementById('ed-status').value,
+  };
+  if (!dados.descricao) { showToast('Informe a descrição','error'); return; }
+  const { error } = await sb.from('despesas').update(dados).eq('id', id);
+  if (error) { showToast('Erro ao salvar','error'); return; }
+  closeModal();
+  showToast('Despesa atualizada!','success');
+  navigate('despesas');
+}
+
+function excluirDespesa(id, descricao) {
+  document.getElementById('modal-body').innerHTML = [
+    '<h3>🗑 Excluir Despesa</h3>',
+    '<p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">Deseja excluir <strong>' + descricao + '</strong>? Esta ação não pode ser desfeita.</p>',
+    '<div class="modal-footer">',
+      '<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>',
+      '<button class="btn btn-danger" id="ed-del-btn">🗑 Excluir</button>',
+    '</div>'
+  ].join('');
+  document.getElementById('ed-del-btn').addEventListener('click', async function(){
+    await sb.from('despesas').delete().eq('id', id);
+    closeModal();
+    showToast('Despesa excluída!','success');
+    navigate('despesas');
+  });
+  openModal();
 }
 
 // ══════════════════════════════════════════════════════
