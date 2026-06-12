@@ -1287,7 +1287,23 @@ async function renderVendas(c) {
         <select id="v-contato"><option>WhatsApp</option><option>Presencial</option><option>Instagram</option><option>Indicação</option></select>
       </div>
       <div class="form-group"><label>Data da Venda</label><input type="date" id="v-data" value="${new Date().toISOString().split('T')[0]}"></div>
-      <div class="form-group"><label>Desconto %</label><input type="number" id="v-desc" value="0" min="0" max="100" oninput="calcTotalVenda()"></div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          Desconto
+          <span style="display:inline-flex;background:var(--gray-100);border-radius:20px;padding:2px">
+            <button type="button" id="v-desc-tipo-pct" onclick="setDescontoTipo('pct')"
+              style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:var(--blue);color:white;font-family:Inter,sans-serif">%</button>
+            <button type="button" id="v-desc-tipo-val" onclick="setDescontoTipo('val')"
+              style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--gray-600);font-family:Inter,sans-serif">R$</button>
+          </span>
+        </label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span id="v-desc-prefix" style="font-size:13px;color:var(--gray-400);font-weight:600;min-width:16px"></span>
+          <input type="number" id="v-desc" value="0" min="0" oninput="calcTotalVenda()"
+            style="flex:1;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:Inter,sans-serif;color:var(--gray-800);outline:none">
+          <span id="v-desc-suffix" style="font-size:13px;color:var(--gray-400);font-weight:600">%</span>
+        </div>
+      </div>
       <div class="form-group"><label>Status</label>
         <select id="v-status"><option value="pago">✅ Pago</option><option value="pendente">⏳ Pendente</option></select>
       </div>
@@ -1435,10 +1451,38 @@ function removerProdutoSelecionado(codigo) {
   atualizarSelecionados();
 }
 
+function setDescontoTipo(tipo) {
+  window._descontoTipo = tipo;
+  const btnPct = document.getElementById('v-desc-tipo-pct');
+  const btnVal = document.getElementById('v-desc-tipo-val');
+  const suffix = document.getElementById('v-desc-suffix');
+  const prefix = document.getElementById('v-desc-prefix');
+  if (btnPct) btnPct.style.background = tipo==='pct'?'var(--blue)':'transparent';
+  if (btnPct) btnPct.style.color      = tipo==='pct'?'white':'var(--gray-600)';
+  if (btnVal) btnVal.style.background = tipo==='val'?'var(--blue)':'transparent';
+  if (btnVal) btnVal.style.color      = tipo==='val'?'white':'var(--gray-600)';
+  if (suffix) suffix.textContent = tipo==='pct'?'%':'';
+  if (prefix) prefix.textContent = tipo==='val'?'R$':'';
+  // Reset to 0 when switching
+  const inp = document.getElementById('v-desc');
+  if (inp) inp.value = 0;
+  atualizarSelecionados();
+}
+
+function getDescontoPct(subtotal) {
+  const tipo = window._descontoTipo||'pct';
+  const val  = parseFloat(document.getElementById('v-desc')?.value)||0;
+  if (tipo === 'pct') return val;
+  if (subtotal > 0) return (val/subtotal)*100;
+  return 0;
+}
+
 function atualizarSelecionados() {
   const sel = window._produtosSelecionados;
-  const desc = parseFloat(document.getElementById('v-desc')?.value)||0;
+  const subtotal0 = sel.reduce(function(a,p){return a+(Number(p.venda)*(p.qty||1));},0);
+  const descPct = getDescontoPct(subtotal0);
 
+  const desc = descPct; // alias para compatibilidade
   const selDiv = document.getElementById('v-selecionados');
   if (selDiv) selDiv.innerHTML = sel.map(function(p) {
     const qty = p.qty||1;
@@ -1459,16 +1503,19 @@ function atualizarSelecionados() {
   }).join('');
 
   const subtotal = sel.reduce(function(a,p){return a+(Number(p.venda)*(p.qty||1));},0);
-  const total    = subtotal * (1-desc/100);
+  const total    = subtotal * (1-descPct/100);
   const prev = document.getElementById('v-preview');
   const tot  = document.getElementById('v-total');
   if (prev) prev.textContent = '';
   if (tot) {
     if (!sel.length) {
       tot.innerHTML = '';
-    } else if (desc > 0) {
+    } else if (descPct > 0) {
+      const tipo = window._descontoTipo||'pct';
+      const descRaw = parseFloat(document.getElementById('v-desc')?.value)||0;
+      const descLabel = tipo==='pct' ? descRaw+'%' : 'R$ '+f(descRaw);
       tot.innerHTML = '<span style="color:#94A3B8;font-size:12px;text-decoration:line-through">R$ ' + f(subtotal) + '</span>'
-        + '&nbsp; -' + desc + '%&nbsp; '
+        + '&nbsp; -' + descLabel + '&nbsp; '
         + '<span style="color:#22C55E;font-size:16px;font-weight:700">💰 R$ ' + f(total) + '</span>';
     } else {
       tot.innerHTML = '<span style="color:#1E293B;font-size:16px;font-weight:700">💰 Total: R$ ' + f(total) + '</span>';
@@ -1693,7 +1740,9 @@ async function registrarVenda() {
   const tel     = document.getElementById('v-tel').value.trim();
   const contato = document.getElementById('v-contato').value;
   const data    = document.getElementById('v-data').value;
-  const desc    = parseFloat(document.getElementById('v-desc').value)||0;
+  const _descRaw = parseFloat(document.getElementById('v-desc').value)||0;
+  const _subtotalBruto = sel.reduce((a,p)=>a+(Number(p.venda)*(p.qty||1)),0);
+  const desc = getDescontoPct(_subtotalBruto); // sempre em %
   const status  = document.getElementById('v-status').value;
   if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
   if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
