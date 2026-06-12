@@ -1414,21 +1414,71 @@ async function renderResumo(c) {
 }
 
 async function renderPrecos(c) {
-  const { data: produtos } = await sb.from('produtos').select('*').eq('user_id',currentUser.id).order('codigo');
+  const { data: produtosRaw } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
+  const produtos = (produtosRaw||[]).sort((a,b)=>{
+    const na=parseInt((a.codigo||'').replace(/[^0-9]/g,''))||0;
+    const nb=parseInt((b.codigo||'').replace(/[^0-9]/g,''))||0;
+    return na-nb;
+  });
+
+  // Categorias únicas
+  const categorias = [...new Set((produtos||[]).map(p=>p.categoria).filter(Boolean))].sort();
+
   c.innerHTML = `
-  <div class="table-card"><table>
-    <thead><tr><th>Código</th><th>Produto</th><th>Custo</th><th>Preço Venda</th><th>Margem %</th><th>Lucro Un.</th><th>Status</th></tr></thead>
-    <tbody id="tbody-resumo">${(produtos||[]).map(p=>{
-      const mg=p.venda>0?((p.venda-p.custo)/p.venda*100):0;
-      const luc=p.venda-p.custo;
-      const rec=mg>=30?'✅ Ótima margem':mg>=20?'🟡 Margem OK':mg>=10?'⚠️ Margem baixa':'🔴 Revisar preço';
-      return `<tr><td><strong>${p.codigo}</strong></td><td>${p.nome}</td>
-        <td>R$ ${f(p.custo)}</td><td><strong>R$ ${f(p.venda)}</strong></td>
-        <td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td>
-        <td>R$ ${f(luc)}</td><td>${rec}</td></tr>`;
-    }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>'}</tbody>
-  </table></div>`;
+  <div class="table-card">
+    <div class="table-header">
+      <h3>Comparativo de Preços e Margem</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="filtro-categoria" onchange="filtrarComparativo()"
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;color:var(--gray-800);background:white">
+          <option value="">📂 Todas as categorias</option>
+          ${categorias.map(cat=>`<option value="${cat.toLowerCase()}">${cat}</option>`).join('')}
+        </select>
+        <input type="text" id="busca-comparativo" placeholder="🔍 Buscar produto..."
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:220px;"
+          oninput="filtrarComparativo()">
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Código</th><th>Produto</th><th>Categoria</th>
+        <th>Custo</th><th>Preço Venda</th><th>Margem %</th><th>Lucro Un.</th><th>Status</th>
+      </tr></thead>
+      <tbody id="tbody-comparativo">${renderComparativoRows(produtos)}</tbody>
+    </table>
+  </div>`;
 }
+
+function renderComparativoRows(produtos) {
+  if (!produtos.length) return '<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>';
+  return produtos.map(p=>{
+    const mg=p.venda>0?((p.venda-p.custo)/p.venda*100):0;
+    const luc=p.venda-p.custo;
+    const rec=mg>=30?'✅ Ótima margem':mg>=20?'🟡 Margem OK':mg>=10?'⚠️ Margem baixa':'🔴 Revisar preço';
+    return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-cod="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}">
+      <td><strong>${p.codigo}</strong></td>
+      <td>${p.nome}</td>
+      <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
+      <td>R$ ${f(p.custo)}</td>
+      <td><strong>R$ ${f(p.venda)}</strong></td>
+      <td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td>
+      <td>R$ ${f(luc)}</td>
+      <td style="font-size:12px">${rec}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarComparativo() {
+  const busca = (document.getElementById('busca-comparativo')?.value||'').toLowerCase();
+  const cat   = (document.getElementById('filtro-categoria')?.value||'').toLowerCase();
+  const rows  = document.querySelectorAll('#tbody-comparativo tr[data-nome]');
+  rows.forEach(r => {
+    const matchBusca = !busca || (r.dataset.nome||'').includes(busca) || (r.dataset.cod||'').includes(busca);
+    const matchCat   = !cat   || (r.dataset.cat||'').includes(cat);
+    r.style.display  = (matchBusca && matchCat) ? '' : 'none';
+  });
+}
+
 
 async function renderPrecif(c) {
   const { data: produtosDB } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
