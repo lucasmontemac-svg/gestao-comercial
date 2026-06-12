@@ -1975,20 +1975,33 @@ async function exportarExcel() {
   const tab = document.querySelector('.resumo-tab.active')?.id?.replace('tab-','')||'produtos';
   const wb  = XLSX.utils.book_new();
 
-  // Aba vendas filtradas
+  // Usa APENAS os dados filtrados pelos filtros ativos
   const vendas = window._filteredVendas||[];
-  const prods  = window._resumoProdutos||[];
+  const prods  = window._filteredProdos||window._resumoProdutos||[];
   const desps  = window._filteredDesps||[];
+  const periodo  = document.getElementById('f-periodo')?.value||'mes';
+  const catAtiva = document.getElementById('f-categoria')?.value||'';
+  const stAtivo  = document.getElementById('f-status')?.value||'';
+  const [de,ate] = getPeriodoDates(periodo);
+  const filtroInfo = `Período: ${de} a ${ate}${catAtiva?' | Categoria: '+catAtiva:''}${stAtivo?' | Status: '+stAtivo:''}`;
 
   // Sheet 1: Vendas
-  const vendasData = [['Cliente','Telefone','Produtos','Data','Total','Desconto %','Status','Observação']];
+  const vendasData = [
+    [filtroInfo],
+    [],
+    ['Cliente','Telefone','Produtos','Data','Total','Desconto %','Status','Observação']
+  ];
   vendas.forEach(v => vendasData.push([v.cliente||'',v.telefone||'',v.codigos||'',v.data_venda||'',Number(v.total),Number(v.desconto)||0,v.status||'',v.observacao||'']));
   const wsVendas = XLSX.utils.aoa_to_sheet(vendasData);
   wsVendas['!cols'] = [{wch:20},{wch:15},{wch:25},{wch:12},{wch:12},{wch:10},{wch:10},{wch:25}];
   XLSX.utils.book_append_sheet(wb, wsVendas, 'Vendas');
 
-  // Sheet 2: Por Produto
-  const prodData = [['Produto','Categoria','Qtd Vendida','Receita (R$)','Custo (R$)','Lucro (R$)','Margem %']];
+  // Sheet 2: Por Produto (filtrado)
+  const prodData = [
+    [filtroInfo],
+    [],
+    ['Produto','Categoria','Qtd Vendida','Receita (R$)','Custo (R$)','Lucro (R$)','Margem %']
+  ];
   prods.forEach(p => {
     const codes = vendas.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()));
     const qtd = codes.filter(c=>c===p.codigo.toUpperCase()).length;
@@ -2040,8 +2053,6 @@ async function exportarExcel() {
   wsGiro['!cols'] = [{wch:30},{wch:15},{wch:14},{wch:12},{wch:18},{wch:12}];
   XLSX.utils.book_append_sheet(wb, wsGiro, 'Giro Estoque');
 
-  const periodo = document.getElementById('f-periodo')?.value||'mes';
-  const [de,ate] = getPeriodoDates(periodo);
   XLSX.writeFile(wb, `gestao_comercial_${de}_${ate}.xlsx`);
   showToast('Excel exportado com sucesso!','success');
 }
@@ -2064,13 +2075,15 @@ async function exportarPDF() {
   }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
-  const vendas  = window._filteredVendas||[];
-  const prods   = window._resumoProdutos||[];
-  const desps   = window._filteredDesps||[];
-  const recTotal= window._filteredReceita||0;
-  const custoTotal= window._filteredCusto||0;
-  const periodo = document.getElementById('f-periodo')?.value||'mes';
-  const [de,ate]= getPeriodoDates(periodo);
+  const vendas   = window._filteredVendas||[];
+  const prods    = window._filteredProdos||window._resumoProdutos||[];
+  const desps    = window._filteredDesps||[];
+  const recTotal = window._filteredReceita||0;
+  const custoTotal = window._filteredCusto||0;
+  const periodo  = document.getElementById('f-periodo')?.value||'mes';
+  const catAtiva = document.getElementById('f-categoria')?.value||'';
+  const stAtivo  = document.getElementById('f-status')?.value||'';
+  const [de,ate] = getPeriodoDates(periodo);
 
   // Header
   doc.setFillColor(15,28,46);
@@ -2081,7 +2094,13 @@ async function exportarPDF() {
   doc.text('GESTÃO COMERCIAL PRO — Relatório de Vendas', 14, 13);
   doc.setFontSize(9);
   doc.setFont('helvetica','normal');
-  doc.text(`Período: ${de} até ${ate}   |   Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 18);
+  const filtrosAtivos = [
+    `Período: ${de} até ${ate}`,
+    catAtiva ? `Categoria: ${catAtiva}` : '',
+    stAtivo  ? `Status: ${stAtivo}`     : '',
+    `Gerado em: ${new Date().toLocaleDateString('pt-BR')}`
+  ].filter(Boolean).join('   |   ');
+  doc.text(filtrosAtivos, 14, 18);
 
   let y = 28;
 
