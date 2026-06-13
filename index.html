@@ -624,8 +624,13 @@ async function renderDashboard(c) {
   // ── Estoque em valor ──
   const estoqueValor = todosProdutos.reduce((a,p)=>a+Number(p.custo)*Number(p.estoque),0);
 
-  // CMV: custo apenas das vendas DESTE MÊS (não do histórico completo)
-  const codesMes = vendasMes.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+  // CMV: custo apenas das vendas DESTE MÊS, excluindo itens dados como BONIFICAÇÃO
+  // (itens de bonificação saem do estoque_bonificacao, que teve custo zero para a empresa)
+  const codesMes = vendasMes.flatMap(v=>{
+    const allCodes = (v.codigos||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    const boniSet  = new Set((v.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+    return allCodes.filter(c=>!boniSet.has(c)); // remove TODAS as unidades do item marcado como boni nesta venda
+  });
   const cmv = todosProdutos.reduce((a,p)=>{
     const qtdVend = codesMes.filter(c=>c===p.codigo.toUpperCase()).length;
     return a + qtdVend * Number(p.custo);
@@ -2076,8 +2081,11 @@ function aplicarFiltrosResumo() {
   // Custo total
   let custoTotal = 0;
   vendas.forEach(v=>{
+    const boniSet = new Set((v.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
     (v.codigos||'').split(',').forEach(c=>{
-      const p=prods.find(x=>x.codigo.toUpperCase()===c.trim().toUpperCase());
+      const cod = c.trim().toUpperCase();
+      if (boniSet.has(cod)) return; // item dado como bonificação não entra no custo
+      const p=prods.find(x=>x.codigo.toUpperCase()===cod);
       if(p) custoTotal+=Number(p.custo);
     });
   });
