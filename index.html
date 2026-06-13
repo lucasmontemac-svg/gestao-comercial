@@ -2860,8 +2860,9 @@ async function renderDespesas(c) {
   <div id="desp-alertas" style="margin-bottom:16px"></div>
 
   <!-- TABS -->
-  <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200)">
+  <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);flex-wrap:wrap">
     <button id="dtab-lista" class="resumo-tab active" onclick="showDespTab('lista')">📋 Lista</button>
+    <button id="dtab-fixos" class="resumo-tab" onclick="showDespTab('fixos')">📌 Lançamentos Fixos</button>
     <button id="dtab-categorias" class="resumo-tab" onclick="showDespTab('categorias')">📂 Por Categoria</button>
     <button id="dtab-evolucao" class="resumo-tab" onclick="showDespTab('evolucao')">📈 Evolução Mensal</button>
     <button id="dtab-fluxo" class="resumo-tab" onclick="showDespTab('fluxo')">💰 Fluxo de Caixa</button>
@@ -2986,6 +2987,7 @@ function showDespTab(tab) {
   const todas     = window._despesasAll||[];
   switch(tab) {
     case 'lista':       content.innerHTML = renderDespLista(filtradas); break;
+    case 'fixos':       content.innerHTML = renderDespFixos(todas); break;
     case 'categorias':  content.innerHTML = renderDespCategorias(filtradas); break;
     case 'evolucao':    content.innerHTML = renderDespEvolucao(todas); break;
     case 'fluxo':       content.innerHTML = renderDespFluxo(todas); break;
@@ -3191,6 +3193,92 @@ function renderDespVencimentos(todas) {
       </div>`).join('')}
     </div>`;
   }).join('')||'<div class="empty-state"><div class="icon">✅</div><p>Nenhuma despesa pendente!</p></div>';
+}
+
+function renderDespFixos(todas) {
+  // Agrupa por descrição para identificar recorrentes
+  const grupos = {};
+  todas.forEach(d => {
+    const key = (d.descricao||'').trim().toLowerCase();
+    if (!grupos[key]) grupos[key] = { descricao: d.descricao, categoria: d.categoria, valores: [], status: [] };
+    grupos[key].valores.push(Number(d.valor));
+    grupos[key].status.push(d.status);
+  });
+
+  // Filtra só os que aparecem mais de uma vez (recorrentes) OU categoria Fixo
+  const fixos = Object.values(grupos).filter(g => g.valores.length > 1 || g.categoria === 'Fixo');
+  fixos.sort((a,b) => {
+    const mediaA = a.valores.reduce((x,y)=>x+y,0)/a.valores.length;
+    const mediaB = b.valores.reduce((x,y)=>x+y,0)/b.valores.length;
+    return mediaB - mediaA;
+  });
+
+  // Também mostra lançamentos únicos com categoria Fixo
+  const unicosFixos = Object.values(grupos).filter(g => g.valores.length === 1 && g.categoria === 'Fixo');
+
+  const totalFixo = fixos.reduce((a,g)=>a+(g.valores[g.valores.length-1]||0),0);
+  const totalUnico = unicosFixos.reduce((a,g)=>a+(g.valores[0]||0),0);
+
+  if (!fixos.length && !unicosFixos.length) {
+    return '<div class="empty-state"><div class="icon">📌</div><p>Nenhum lançamento fixo identificado.<br><small>Marque despesas como categoria "Fixo" ou lance o mesmo nome mais de uma vez.</small></p></div>';
+  }
+
+  const renderLinha = (g, isRecorrente) => {
+    const media = g.valores.reduce((a,b)=>a+b,0)/g.valores.length;
+    const ultimo = g.valores[g.valores.length-1];
+    const variou = g.valores.length > 1 && Math.max(...g.valores) !== Math.min(...g.valores);
+    return `<tr style="border-bottom:1px solid var(--gray-100)">
+      <td style="padding:10px 12px;font-size:13px">
+        <strong>${g.descricao}</strong>
+        ${isRecorrente ? '<span style="margin-left:6px;font-size:10px;background:#EFF6FF;color:var(--blue);padding:2px 6px;border-radius:10px">🔁 Recorrente</span>' : ''}
+      </td>
+      <td style="padding:10px 12px;text-align:center"><span class="badge badge-blue">${g.categoria||'—'}</span></td>
+      <td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--gray-400)">${g.valores.length}x lançado</td>
+      <td style="padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:var(--red)">R$ ${f(ultimo)}</td>
+      <td style="padding:10px 12px;text-align:right;font-size:12px;color:var(--gray-400)">
+        ${g.valores.length > 1 ? 'Média: R$ '+f(media) : '—'}
+        ${variou ? '<br><span style="color:var(--yellow);font-size:10px">⚠️ Valor variou</span>' : ''}
+      </td>
+      <td style="padding:10px 12px;text-align:center">
+        <div style="display:flex;gap:4px;justify-content:center">
+          ${g.status[g.status.length-1]==='pago'
+            ? '<span class="badge badge-green">✅ Pago</span>'
+            : '<span class="badge badge-yellow">⏳ Pendente</span>'}
+        </div>
+      </td>
+    </tr>`;
+  };
+
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <div style="font-family:Sora;font-size:13px;font-weight:700;color:var(--navy)">Lançamentos Fixos Identificados</div>
+      <div style="font-size:12px;color:var(--gray-400);margin-top:2px">Despesas recorrentes ou com categoria "Fixo"</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:12px;color:var(--gray-400)">Total mensal estimado</div>
+      <div style="font-size:20px;font-weight:800;font-family:Sora;color:var(--red)">R$ ${f(totalFixo + totalUnico)}</div>
+    </div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Descrição</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Categoria</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Frequência</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Último Valor</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Histórico</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Status Atual</th>
+    </tr></thead>
+    <tbody>
+      ${fixos.map(g=>renderLinha(g,true)).join('')}
+      ${unicosFixos.length>0?`<tr><td colspan="6" style="padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);background:var(--gray-50);text-transform:uppercase">Fixos com único lançamento</td></tr>${unicosFixos.map(g=>renderLinha(g,false)).join('')}`:''}
+    </tbody>
+  </table>
+
+  <div style="margin-top:16px;background:rgba(46,117,182,.06);border:1px solid rgba(46,117,182,.15);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--blue)">
+    💡 <strong>Dica:</strong> Para identificar automaticamente como fixo, use sempre o mesmo nome ao lançar (ex: "Aluguel") ou marque a categoria como "Fixo".
+  </div>`;
 }
 
 async function exportarDespesasExcel() {
