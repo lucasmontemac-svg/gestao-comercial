@@ -2764,9 +2764,74 @@ function calcDifalPrecif() {
   renderPrecifTabela();
 }
 async function renderDespesas(c) {
-  const { data: despesas } = await sb.from('despesas').select('*').eq('user_id',currentUser.id).order('vencimento');
+  const hoje = new Date();
+  const hojeStr = hoje.toISOString().split('T')[0];
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+
+  const [{ data: despesas }, { data: vendas }] = await Promise.all([
+    sb.from('despesas').select('*').eq('user_id', currentUser.id).order('vencimento'),
+    sb.from('vendas').select('total,data_venda').eq('user_id', currentUser.id),
+  ]);
+
+  window._despesasAll = despesas||[];
+  window._despesasVendas = vendas||[];
+
+  const cats = [...new Set((despesas||[]).map(d=>d.categoria).filter(Boolean))].sort();
+
   c.innerHTML = `
-  <div class="form-card">
+  <!-- FILTROS -->
+  <div class="form-card" style="margin-bottom:16px;padding:16px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <select id="df-periodo" onchange="aplicarFiltrosDespesas()"
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:8px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
+        <option value="mes">📅 Este mês</option>
+        <option value="mes-ant">📅 Mês passado</option>
+        <option value="30d">📅 Últimos 30 dias</option>
+        <option value="90d">📅 Últimos 90 dias</option>
+        <option value="tudo">📅 Todo o período</option>
+        <option value="custom">📅 Intervalo personalizado</option>
+      </select>
+      <div id="df-custom-dates" style="display:none;gap:8px;align-items:center">
+        <input type="date" id="df-de" style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 10px;font-size:13px;outline:none" onchange="aplicarFiltrosDespesas()">
+        <span style="font-size:12px;color:var(--gray-400)">até</span>
+        <input type="date" id="df-ate" style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 10px;font-size:13px;outline:none" onchange="aplicarFiltrosDespesas()">
+      </div>
+      <select id="df-cat" onchange="aplicarFiltrosDespesas()"
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:8px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
+        <option value="">📂 Todas categorias</option>
+        ${cats.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <select id="df-status" onchange="aplicarFiltrosDespesas()"
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:8px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
+        <option value="">📋 Todos status</option>
+        <option value="pago">✅ Pago</option>
+        <option value="pendente">⏳ Pendente</option>
+      </select>
+      <div style="display:flex;gap:6px;margin-left:auto">
+        <button class="btn btn-success btn-sm" onclick="exportarDespesasExcel()">📊 Excel</button>
+        <button class="btn btn-danger btn-sm" onclick="exportarDespesasPDF()">📄 PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div id="desp-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px"></div>
+
+  <!-- ALERTA VENCIMENTOS -->
+  <div id="desp-alertas" style="margin-bottom:16px"></div>
+
+  <!-- TABS -->
+  <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200)">
+    <button id="dtab-lista" class="resumo-tab active" onclick="showDespTab('lista')">📋 Lista</button>
+    <button id="dtab-categorias" class="resumo-tab" onclick="showDespTab('categorias')">📂 Por Categoria</button>
+    <button id="dtab-evolucao" class="resumo-tab" onclick="showDespTab('evolucao')">📈 Evolução Mensal</button>
+    <button id="dtab-fluxo" class="resumo-tab" onclick="showDespTab('fluxo')">💰 Fluxo de Caixa</button>
+    <button id="dtab-vencimentos" class="resumo-tab" onclick="showDespTab('vencimentos')">⏰ Vencimentos</button>
+  </div>
+  <div id="desp-content" style="background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 14px 14px;padding:20px"></div>
+
+  <!-- FORM NOVA DESPESA -->
+  <div class="form-card" style="margin-top:20px">
     <div class="section-title">+ Registrar Despesa</div>
     <div class="form-grid">
       <div class="form-group"><label>Descrição</label><input type="text" id="d-desc" placeholder="Ex: Aluguel"></div>
@@ -2775,23 +2840,357 @@ async function renderDespesas(c) {
       <div class="form-group"><label>Categoria</label>
         <select id="d-cat"><option>Fixo</option><option>Variável</option><option>Eventual</option></select>
       </div>
+      <div class="form-group"><label>Recorrente?</label>
+        <select id="d-recorrente">
+          <option value="0">Não — lançamento único</option>
+          <option value="1">Sim — repete todo mês</option>
+        </select>
+      </div>
     </div>
-    <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarDespesa()">+ Adicionar</button></div>
-  </div>
-  <div class="table-card"><table>
-    <thead><tr><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Categoria</th><th>Status</th><th>Ações</th></tr></thead>
-    <tbody>${(despesas||[]).map(d=>`<tr>
-      <td>${d.descricao}</td><td>R$ ${f(d.valor)}</td><td>${d.vencimento||'—'}</td>
-      <td><span class="badge badge-blue">${d.categoria}</span></td>
-      <td><span class="badge badge-${d.status==='pago'?'green':'yellow'}">${d.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
-      <td style="display:flex;gap:4px">
-        <button class="btn btn-sm btn-outline" onclick="toggleDespesa('${d.id}','${d.status}')" title="${d.status==='pago'?'Desfazer pagamento':'Marcar como pago'}">${d.status==='pago'?'↩ Desfazer':'✅ Pagar'}</button>
-        <button class="btn btn-sm btn-outline" onclick="openEditDespesa('${d.id}','${d.descricao}',${d.valor},'${d.vencimento||''}','${d.categoria}','${d.status}')" title="Editar">✏️</button>
-        <button class="btn btn-sm btn-danger" onclick="excluirDespesa('${d.id}','${d.descricao}')" title="Excluir">🗑</button>
-      </td>
-    </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma despesa registrada</td></tr>'}</tbody>
-  </table></div>`;
+    <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarDespesa()">+ Adicionar Despesa</button></div>
+  </div>`;
+
+  aplicarFiltrosDespesas();
 }
+
+function getDespPeriodoDates(periodo) {
+  const hoje = new Date();
+  const hojeStr = hoje.toISOString().split('T')[0];
+  switch(periodo) {
+    case 'mes':     { const ini=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0]; return [ini,hojeStr]; }
+    case 'mes-ant': { const ini=new Date(hoje.getFullYear(),hoje.getMonth()-1,1).toISOString().split('T')[0]; const fim=new Date(hoje.getFullYear(),hoje.getMonth(),0).toISOString().split('T')[0]; return [ini,fim]; }
+    case '30d':     { return [new Date(hoje-30*864e5).toISOString().split('T')[0],hojeStr]; }
+    case '90d':     { return [new Date(hoje-90*864e5).toISOString().split('T')[0],hojeStr]; }
+    case 'custom':  { return [document.getElementById('df-de')?.value||'2000-01-01', document.getElementById('df-ate')?.value||hojeStr]; }
+    default:        return ['2000-01-01',hojeStr];
+  }
+}
+
+function aplicarFiltrosDespesas() {
+  const periodo = document.getElementById('df-periodo')?.value||'mes';
+  const cat     = document.getElementById('df-cat')?.value||'';
+  const status  = document.getElementById('df-status')?.value||'';
+  const customDiv = document.getElementById('df-custom-dates');
+  if (customDiv) customDiv.style.display = periodo==='custom'?'flex':'none';
+
+  const [de, ate] = getDespPeriodoDates(periodo);
+  const todas = window._despesasAll||[];
+
+  let filtradas = todas.filter(d => {
+    const okPer = !d.vencimento || (d.vencimento >= de && d.vencimento <= ate);
+    const okCat = !cat || d.categoria === cat;
+    const okSt  = !status || d.status === status;
+    return okPer && okCat && okSt;
+  });
+
+  window._despesasFiltradas = filtradas;
+
+  // KPIs
+  const totalDesp  = filtradas.reduce((a,d)=>a+Number(d.valor),0);
+  const totalPago  = filtradas.filter(d=>d.status==='pago').reduce((a,d)=>a+Number(d.valor),0);
+  const totalPend  = filtradas.filter(d=>d.status==='pendente').reduce((a,d)=>a+Number(d.valor),0);
+  const maiorDesp  = filtradas.reduce((a,d)=>Number(d.valor)>a.v?{v:Number(d.valor),n:d.descricao}:a,{v:0,n:'—'});
+  const vendas     = window._despesasVendas||[];
+  const recMes     = vendas.filter(v=>v.data_venda>=de&&v.data_venda<=ate).reduce((a,v)=>a+Number(v.total),0);
+  const pctReceita = recMes>0?(totalDesp/recMes*100):0;
+
+  const kpiEl = document.getElementById('desp-kpis');
+  if (kpiEl) kpiEl.innerHTML = `
+    <div class="kpi-card kpi-red" style="padding:16px">
+      <div class="kpi-label">Total Despesas</div>
+      <div class="kpi-value" style="font-size:22px">R$ ${f(totalDesp)}</div>
+      <div class="kpi-sub">${filtradas.length} lançamento(s)</div>
+    </div>
+    <div class="kpi-card kpi-green" style="padding:16px">
+      <div class="kpi-label">Total Pago</div>
+      <div class="kpi-value" style="font-size:22px">R$ ${f(totalPago)}</div>
+      <div class="kpi-sub">${filtradas.filter(d=>d.status==='pago').length} despesa(s)</div>
+    </div>
+    <div class="kpi-card kpi-yellow" style="padding:16px">
+      <div class="kpi-label">Pendente</div>
+      <div class="kpi-value" style="font-size:22px">R$ ${f(totalPend)}</div>
+      <div class="kpi-sub">${filtradas.filter(d=>d.status==='pendente').length} despesa(s)</div>
+    </div>
+    <div class="kpi-card kpi-blue" style="padding:16px">
+      <div class="kpi-label">% sobre Receita</div>
+      <div class="kpi-value" style="font-size:22px">${pctReceita.toFixed(1)}%</div>
+      <div class="kpi-sub">Maior: ${maiorDesp.n}</div>
+    </div>`;
+
+  // Alertas vencimentos próximos
+  const hoje = new Date().toISOString().split('T')[0];
+  const em3d = new Date(Date.now()+3*864e5).toISOString().split('T')[0];
+  const em7d = new Date(Date.now()+7*864e5).toISOString().split('T')[0];
+  const vencendo = (window._despesasAll||[]).filter(d=>d.status==='pendente'&&d.vencimento&&d.vencimento<=em7d);
+  const alertEl = document.getElementById('desp-alertas');
+  if (alertEl && vencendo.length) {
+    alertEl.innerHTML = `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:12px 16px">
+      <div style="font-weight:700;font-size:13px;color:var(--red);margin-bottom:8px">⏰ ${vencendo.length} despesa(s) vencendo nos próximos 7 dias:</div>
+      ${vencendo.map(d=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--gray-700)">
+        <span>${d.descricao}</span>
+        <span><strong>R$ ${f(d.valor)}</strong> — vence ${d.vencimento.split('-').reverse().join('/')}</span>
+      </div>`).join('')}
+    </div>`;
+  } else if (alertEl) alertEl.innerHTML = '';
+
+  const activeTab = document.querySelector('.resumo-tab.active[id^="dtab"]')?.id?.replace('dtab-','')||'lista';
+  showDespTab(activeTab);
+}
+
+function showDespTab(tab) {
+  document.querySelectorAll('[id^="dtab"]').forEach(t=>t.classList.remove('active'));
+  const tabEl = document.getElementById('dtab-'+tab);
+  if (tabEl) tabEl.classList.add('active');
+  const content = document.getElementById('desp-content');
+  if (!content) return;
+  const filtradas = window._despesasFiltradas||[];
+  const todas     = window._despesasAll||[];
+  switch(tab) {
+    case 'lista':       content.innerHTML = renderDespLista(filtradas); break;
+    case 'categorias':  content.innerHTML = renderDespCategorias(filtradas); break;
+    case 'evolucao':    content.innerHTML = renderDespEvolucao(todas); break;
+    case 'fluxo':       content.innerHTML = renderDespFluxo(todas); break;
+    case 'vencimentos': content.innerHTML = renderDespVencimentos(todas); break;
+  }
+}
+
+function renderDespLista(despesas) {
+  if (!despesas.length) return '<div class="empty-state"><div class="icon">💸</div><p>Nenhuma despesa no período</p></div>';
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Descrição</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Valor</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Vencimento</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Categoria</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Status</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Ações</th>
+    </tr></thead>
+    <tbody>${despesas.map(d=>{
+      const hoje = new Date().toISOString().split('T')[0];
+      const em3d = new Date(Date.now()+3*864e5).toISOString().split('T')[0];
+      const vencAlert = d.status==='pendente'&&d.vencimento&&d.vencimento<=em3d;
+      return `<tr style="border-bottom:1px solid var(--gray-100)${vencAlert?';background:rgba(239,68,68,.04)':''}">
+        <td style="padding:10px 12px;font-size:13px">
+          <strong>${d.descricao}</strong>
+          ${vencAlert?'<span style="margin-left:6px;font-size:10px;background:#FEE2E2;color:var(--red);padding:2px 6px;border-radius:10px">⚠️ Vence em breve</span>':''}
+        </td>
+        <td style="padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:var(--red)">R$ ${f(d.valor)}</td>
+        <td style="padding:10px 12px;text-align:center;font-size:12px">${d.vencimento?d.vencimento.split('-').reverse().join('/'):'—'}</td>
+        <td style="padding:10px 12px;text-align:center"><span class="badge badge-blue">${d.categoria||'—'}</span></td>
+        <td style="padding:10px 12px;text-align:center">
+          <span class="badge badge-${d.status==='pago'?'green':'yellow'}">${d.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
+        </td>
+        <td style="padding:10px 12px">
+          <div style="display:flex;gap:4px;justify-content:center">
+            <button class="btn btn-sm btn-outline" onclick="toggleDespesa('${d.id}','${d.status}')">${d.status==='pago'?'↩':'✅'}</button>
+            <button class="btn btn-sm btn-outline" onclick="openEditDespesa('${d.id}','${d.descricao}',${d.valor},'${d.vencimento||''}','${d.categoria}','${d.status}')">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="excluirDespesa('${d.id}','${d.descricao}')">🗑</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderDespCategorias(despesas) {
+  const catMap = {};
+  despesas.forEach(d=>{
+    const c = d.categoria||'Outros';
+    if (!catMap[c]) catMap[c]={total:0,pago:0,qtd:0};
+    catMap[c].total += Number(d.valor);
+    catMap[c].pago  += d.status==='pago'?Number(d.valor):0;
+    catMap[c].qtd++;
+  });
+  const totalGeral = despesas.reduce((a,d)=>a+Number(d.valor),0)||1;
+  const lista = Object.entries(catMap).sort((a,b)=>b[1].total-a[1].total);
+  if (!lista.length) return '<div class="empty-state"><div class="icon">📂</div><p>Nenhuma despesa no período</p></div>';
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div>
+      <div style="font-family:Sora;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px">Despesas por Categoria</div>
+      ${lista.map(([cat,d])=>{
+        const pct = d.total/totalGeral*100;
+        return `<div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+            <span><strong>${cat}</strong> <span style="color:var(--gray-400);font-size:11px">${d.qtd} lançamento(s)</span></span>
+            <span><strong>R$ ${f(d.total)}</strong> <span style="color:var(--gray-400);font-size:11px">${pct.toFixed(1)}%</span></span>
+          </div>
+          <div style="background:var(--gray-100);border-radius:10px;height:8px;overflow:hidden">
+            <div style="height:100%;border-radius:10px;background:var(--red);width:${pct}%"></div>
+          </div>
+          <div style="font-size:11px;color:var(--green-dim);margin-top:2px">✅ Pago: R$ ${f(d.pago)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div>
+      <div style="font-family:Sora;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px">Resumo</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Categoria</th>
+          <th style="text-align:right;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Total</th>
+          <th style="text-align:right;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">%</th>
+        </tr></thead>
+        <tbody>${lista.map(([cat,d])=>`<tr style="border-bottom:1px solid var(--gray-100)">
+          <td style="padding:8px;font-size:13px">${cat}</td>
+          <td style="padding:8px;text-align:right;font-size:13px;font-weight:600;color:var(--red)">R$ ${f(d.total)}</td>
+          <td style="padding:8px;text-align:right;font-size:12px;color:var(--gray-400)">${(d.total/totalGeral*100).toFixed(1)}%</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderDespEvolucao(todas) {
+  const meses = {};
+  todas.forEach(d=>{
+    const m=(d.vencimento||'').substring(0,7);
+    if(!m)return;
+    if(!meses[m])meses[m]={mes:m,total:0,pago:0,qtd:0};
+    meses[m].total+=Number(d.valor);
+    meses[m].pago +=d.status==='pago'?Number(d.valor):0;
+    meses[m].qtd++;
+  });
+  const lista=Object.values(meses).sort((a,b)=>a.mes.localeCompare(b.mes));
+  if(!lista.length)return'<div class="empty-state"><div class="icon">📈</div><p>Sem dados para mostrar</p></div>';
+  const maxVal=Math.max(...lista.map(m=>m.total));
+  const fmtMes=m=>{const[y,mo]=m.split('-');const n=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];return n[parseInt(mo)-1]+'/'+y.slice(2);};
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Mês</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Lançamentos</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Total</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Pago</th>
+      <th style="padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Progresso</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Variação</th>
+    </tr></thead>
+    <tbody>${lista.map((m,i)=>{
+      const prev=i>0?lista[i-1].total:null;
+      const var_=prev!=null&&prev>0?((m.total-prev)/prev*100):null;
+      const pct=maxVal>0?(m.total/maxVal*100):0;
+      return`<tr style="border-bottom:1px solid var(--gray-100)">
+        <td style="padding:10px 12px;font-size:13px;font-weight:600">${fmtMes(m.mes)}</td>
+        <td style="padding:10px 12px;text-align:center;font-size:13px">${m.qtd}</td>
+        <td style="padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:var(--red)">R$ ${f(m.total)}</td>
+        <td style="padding:10px 12px;text-align:right;font-size:13px;color:var(--green-dim)">R$ ${f(m.pago)}</td>
+        <td style="padding:10px 12px">
+          <div style="background:var(--gray-100);border-radius:10px;height:8px;overflow:hidden">
+            <div style="height:100%;border-radius:10px;background:var(--red);width:${pct}%"></div>
+          </div>
+        </td>
+        <td style="padding:10px 12px;text-align:center">
+          ${var_!=null?`<span style="font-size:12px;font-weight:700;color:${var_<=0?'var(--green-dim)':'var(--red)'}">${var_<=0?'▼':'▲'} ${Math.abs(var_).toFixed(1)}%</span>`:'—'}
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderDespFluxo(todas) {
+  const vendas = window._despesasVendas||[];
+  const meses  = {};
+  todas.forEach(d=>{
+    const m=(d.vencimento||'').substring(0,7);
+    if(!m)return;
+    if(!meses[m])meses[m]={mes:m,desp:0,rec:0};
+    meses[m].desp+=Number(d.valor);
+  });
+  vendas.forEach(v=>{
+    const m=(v.data_venda||'').substring(0,7);
+    if(!m)return;
+    if(!meses[m])meses[m]={mes:m,desp:0,rec:0};
+    meses[m].rec+=Number(v.total);
+  });
+  const lista=Object.values(meses).sort((a,b)=>a.mes.localeCompare(b.mes));
+  if(!lista.length)return'<div class="empty-state"><div class="icon">💰</div><p>Sem dados para mostrar</p></div>';
+  const fmtMes=m=>{const[y,mo]=m.split('-');const n=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];return n[parseInt(mo)-1]+'/'+y.slice(2);};
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Mês</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Receita</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Despesas</th>
+      <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Saldo</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Resultado</th>
+    </tr></thead>
+    <tbody>${lista.map(m=>{
+      const saldo=m.rec-m.desp;
+      return`<tr style="border-bottom:1px solid var(--gray-100)">
+        <td style="padding:10px 12px;font-size:13px;font-weight:600">${fmtMes(m.mes)}</td>
+        <td style="padding:10px 12px;text-align:right;font-size:13px;color:var(--green-dim);font-weight:600">R$ ${f(m.rec)}</td>
+        <td style="padding:10px 12px;text-align:right;font-size:13px;color:var(--red);font-weight:600">R$ ${f(m.desp)}</td>
+        <td style="padding:10px 12px;text-align:right;font-size:14px;font-weight:800;font-family:Sora;color:${saldo>=0?'var(--blue)':'var(--red)'}">R$ ${f(saldo)}</td>
+        <td style="padding:10px 12px;text-align:center">
+          <span class="badge badge-${saldo>=0?'green':'red'}">${saldo>=0?'✅ Positivo':'❌ Negativo'}</span>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderDespVencimentos(todas) {
+  const hoje = new Date().toISOString().split('T')[0];
+  const em7d = new Date(Date.now()+7*864e5).toISOString().split('T')[0];
+  const em15d= new Date(Date.now()+15*864e5).toISOString().split('T')[0];
+  const em30d= new Date(Date.now()+30*864e5).toISOString().split('T')[0];
+  const pendentes = todas.filter(d=>d.status==='pendente'&&d.vencimento);
+  const grupos = [
+    {label:'🔴 Vencidas', color:'var(--red)', items: pendentes.filter(d=>d.vencimento<hoje)},
+    {label:'⚠️ Vencem em 7 dias', color:'#DC2626', items: pendentes.filter(d=>d.vencimento>=hoje&&d.vencimento<=em7d)},
+    {label:'🟡 Vencem em 15 dias', color:'var(--yellow)', items: pendentes.filter(d=>d.vencimento>em7d&&d.vencimento<=em15d)},
+    {label:'🔵 Vencem em 30 dias', color:'var(--blue)', items: pendentes.filter(d=>d.vencimento>em15d&&d.vencimento<=em30d)},
+    {label:'✅ Após 30 dias', color:'var(--green-dim)', items: pendentes.filter(d=>d.vencimento>em30d)},
+  ];
+  return grupos.map(g=>{
+    if(!g.items.length)return'';
+    return`<div style="margin-bottom:20px">
+      <div style="font-family:Sora;font-size:13px;font-weight:700;color:${g.color};margin-bottom:10px">${g.label} (${g.items.length})</div>
+      ${g.items.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;margin-bottom:6px;font-size:13px">
+        <span><strong>${d.descricao}</strong> <span class="badge badge-blue" style="margin-left:6px">${d.categoria}</span></span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-weight:700;color:var(--red)">R$ ${f(d.valor)}</span>
+          <span style="color:var(--gray-400);font-size:12px">${d.vencimento.split('-').reverse().join('/')}</span>
+          <button class="btn btn-sm btn-success" onclick="toggleDespesa('${d.id}','pendente')">✅ Pagar</button>
+        </div>
+      </div>`).join('')}
+    </div>`;
+  }).join('')||'<div class="empty-state"><div class="icon">✅</div><p>Nenhuma despesa pendente!</p></div>';
+}
+
+async function exportarDespesasExcel() {
+  const desps = window._despesasFiltradas||[];
+  if (!desps.length) { showToast('Sem dados para exportar','error'); return; }
+  const wb = XLSX.utils.book_new();
+  const data = [['Descrição','Valor (R$)','Vencimento','Categoria','Status']];
+  desps.forEach(d=>data.push([d.descricao,Number(d.valor),d.vencimento||'',d.categoria||'',d.status]));
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:30},{wch:14},{wch:14},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'Despesas');
+  XLSX.writeFile(wb,'despesas_'+new Date().toISOString().split('T')[0]+'.xlsx');
+  showToast('Excel exportado!','success');
+}
+
+async function exportarDespesasPDF() {
+  const desps = window._despesasFiltradas||[];
+  if (!desps.length) { showToast('Sem dados para exportar','error'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const total = desps.reduce((a,d)=>a+Number(d.valor),0);
+  doc.setFillColor(15,28,46); doc.rect(0,0,297,20,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(14); doc.setFont('helvetica','bold');
+  doc.text('GESTÃO COMERCIAL PRO — Relatório de Despesas', 14, 13);
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text(`Total: R$ ${f(total)} | ${desps.length} lançamento(s) | Gerado: ${hoje}`, 14, 18);
+  doc.autoTable({
+    startY:25, margin:{left:14,right:14},
+    head:[['Descrição','Valor','Vencimento','Categoria','Status']],
+    body:desps.map(d=>[ d.descricao,'R$ '+f(d.valor),d.vencimento?d.vencimento.split('-').reverse().join('/'):'-',d.categoria||'-',d.status==='pago'?'Pago':'Pendente']),
+    styles:{fontSize:9,cellPadding:3},
+    headStyles:{fillColor:[239,68,68],textColor:255,fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[248,250,252]},
+  });
+  doc.save('despesas_'+new Date().toISOString().split('T')[0]+'.pdf');
+  showToast('PDF exportado!','success');
+}
+
 
 async function salvarDespesa() {
   const dados={user_id:currentUser.id,descricao:document.getElementById('d-desc').value.trim(),valor:parseFloat(document.getElementById('d-val').value)||0,vencimento:document.getElementById('d-venc').value,categoria:document.getElementById('d-cat').value};
