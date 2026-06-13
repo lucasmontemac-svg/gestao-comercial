@@ -623,14 +623,20 @@ async function renderDashboard(c) {
 
   // ── Estoque em valor ──
   const estoqueValor = todosProdutos.reduce((a,p)=>a+Number(p.custo)*Number(p.estoque),0);
+
+  // CMV: custo apenas das vendas DESTE MÊS (não do histórico completo)
+  const codesMes = vendasMes.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
   const cmv = todosProdutos.reduce((a,p)=>{
-    const codes = todasVendas.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()));
-    const qtdVend = codes.filter(c=>c===p.codigo.toUpperCase()).length;
+    const qtdVend = codesMes.filter(c=>c===p.codigo.toUpperCase()).length;
     return a + qtdVend * Number(p.custo);
   },0);
 
-  // ── Despesas do mês ──
-  const despMes = todasDespesas.reduce((a,d)=>a+Number(d.valor),0);
+  // ── Despesas do mês (filtra por vencimento dentro do mês atual) ──
+  const mesAtualStr = inicioMes.substring(0,7); // 'YYYY-MM'
+  const despesasMes = todasDespesas.filter(d => (d.vencimento||'').substring(0,7) === mesAtualStr);
+  const despMes = despesasMes.length > 0
+    ? despesasMes.reduce((a,d)=>a+Number(d.valor),0)
+    : todasDespesas.reduce((a,d)=>a+Number(d.valor),0); // fallback: se nenhuma despesa tem vencimento no mês, usa total
   const lucroLiq = receitaMes - cmv - despMes;
   const pontoEq  = despMes > 0 && receitaMes > cmv ? despMes / (1 - (cmv/Math.max(receitaMes,1))) : 0;
   const percDesp = receitaMes > 0 ? (despMes/receitaMes*100) : 0;
