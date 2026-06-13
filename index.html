@@ -905,7 +905,8 @@ function renderProdutoRows(produtos) {
   return produtos.map(p => {
     const mg = p.venda>0?((p.venda-p.custo)/p.venda*100):0;
     return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}">
-      <td><strong>${p.codigo}</strong></td><td>${p.nome}</td>
+      <td><strong>${p.codigo}</strong></td>
+      <td>${p.nome}${p.bonificacao?'<span style="margin-left:6px;font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:10px">🎁 Bonificação</span>':''}</td>
       <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
       <td>R$ ${f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
       <td style="${p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${p.estoque} un.</td>
@@ -1059,6 +1060,13 @@ function openEditProduto(p) {
       <div class="form-group"><label>Preço de Venda (R$)</label><input type="number" id="ep-venda" value="${p.venda}"></div>
       <div class="form-group"><label>Estoque</label><input type="number" id="ep-estq" value="${p.estoque}"></div>
     </div>
+    <div style="margin-top:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <input type="checkbox" id="ep-bonificacao" ${p.bonificacao?'checked':''} style="width:16px;height:16px;accent-color:var(--yellow)">
+      <div>
+        <label for="ep-bonificacao" style="font-size:13px;font-weight:600;color:#92400E;cursor:pointer">🎁 Este produto é uma BONIFICAÇÃO</label>
+        <div style="font-size:11px;color:#B45309;margin-top:2px">Não entra como custo nem valor de estoque.</div>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-success" onclick="salvarEdicaoProduto('${p.id}')">💾 Salvar</button>
@@ -1067,13 +1075,15 @@ function openEditProduto(p) {
 }
 
 async function salvarEdicaoProduto(id) {
+  const isBoniEd = document.getElementById('ep-bonificacao')?.checked||false;
   const dados = {
     codigo: document.getElementById('ep-cod').value.trim().toUpperCase(),
     nome:   document.getElementById('ep-nome').value.trim(),
     categoria: document.getElementById('ep-cat').value.trim(),
-    custo:  parseFloat(document.getElementById('ep-custo').value)||0,
+    custo:  isBoniEd ? 0 : (parseFloat(document.getElementById('ep-custo').value)||0),
     venda:  parseFloat(document.getElementById('ep-venda').value)||0,
     estoque: parseInt(document.getElementById('ep-estq').value)||0,
+    bonificacao: isBoniEd,
   };
   const { error } = await sb.from('produtos').update(dados).eq('id', id);
   if (error) { showToast('Erro ao salvar','error'); return; }
@@ -1286,6 +1296,13 @@ async function openProdutoModal() {
       <div class="form-group"><label>Preço de Venda (R$)</label><input type="number" id="np-venda" placeholder="0,00"></div>
       <div class="form-group"><label>Estoque Inicial</label><input type="number" id="np-estq" placeholder="0"></div>
     </div>
+    <div style="margin-top:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <input type="checkbox" id="np-bonificacao" style="width:16px;height:16px;accent-color:var(--yellow)">
+      <div>
+        <label for="np-bonificacao" style="font-size:13px;font-weight:600;color:#92400E;cursor:pointer">🎁 Este produto é uma BONIFICAÇÃO</label>
+        <div style="font-size:11px;color:#B45309;margin-top:2px">Não entra como custo nem valor de estoque. Apenas controla a quantidade disponível.</div>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-success" onclick="salvarProduto()">✅ Salvar Produto</button>
@@ -1294,14 +1311,16 @@ async function openProdutoModal() {
 }
 
 async function salvarProduto() {
+  const isBoni = document.getElementById('np-bonificacao')?.checked||false;
   const dados = {
     user_id:currentUser.id,
     codigo: document.getElementById('np-cod').value.trim().toUpperCase(),
     nome:   document.getElementById('np-nome').value.trim(),
     categoria: document.getElementById('np-cat').value.trim(),
-    custo:  parseFloat(document.getElementById('np-custo').value)||0,
+    custo:  isBoni ? 0 : (parseFloat(document.getElementById('np-custo').value)||0),
     venda:  parseFloat(document.getElementById('np-venda').value)||0,
     estoque: parseInt(document.getElementById('np-estq').value)||0,
+    bonificacao: isBoni,
   };
   if (!dados.codigo || !dados.nome) { showToast('Código e nome são obrigatórios','error'); return; }
   const { error } = await sb.from('produtos').insert(dados);
@@ -1485,6 +1504,11 @@ function atualizarQtyVenda(codigo, val) {
   if (p) { p.qty = Math.max(1, parseInt(val)||1); atualizarSelecionados(); }
 }
 
+function toggleBoniVenda(codigo, isBoni) {
+  const p = window._produtosSelecionados.find(x=>x.codigo===codigo);
+  if (p) { p._isBoni = isBoni; atualizarSelecionados(); }
+}
+
 function removerProdutoSelecionado(codigo) {
   window._produtosSelecionados = window._produtosSelecionados.filter(p=>p.codigo!==codigo);
   atualizarSelecionados();
@@ -1525,23 +1549,35 @@ function atualizarSelecionados() {
   const selDiv = document.getElementById('v-selecionados');
   if (selDiv) selDiv.innerHTML = sel.map(function(p) {
     const qty = p.qty||1;
-    const subtProd = Number(p.venda) * qty;
-    return '<div style="display:inline-flex;align-items:center;gap:6px;background:#1A3A5C;border-radius:10px;padding:6px 10px;margin:2px;font-size:12px">'
+    const isBoni = p.bonificacao||p._isBoni||false;
+    const subtProd = isBoni ? 0 : Number(p.venda) * qty;
+    const bgColor  = isBoni ? '#78350F' : '#1A3A5C';
+    return '<div style="display:inline-flex;align-items:center;gap:6px;background:'+bgColor+';border-radius:10px;padding:6px 10px;margin:2px;font-size:12px">'
+      + (isBoni?'<span style="font-size:12px">🎁</span>':'')
       + '<span style="color:white;font-weight:600">' + p.codigo + ' — ' + p.nome + '</span>'
-      + '<span style="color:rgba(255,255,255,.6);font-size:11px">R$ ' + f(p.venda) + ' un.</span>'
+      + (isBoni
+        ? '<span style="color:#FCD34D;font-size:10px;font-weight:700">BONIFICAÇÃO</span>'
+        : '<span style="color:rgba(255,255,255,.6);font-size:11px">R$ ' + f(p.venda) + ' un.</span>')
       + '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);border-radius:6px;padding:2px 6px">'
       + '<span style="color:rgba(255,255,255,.6);font-size:10px">Qtd:</span>'
       + '<input type="number" value="' + qty + '" min="1" '
       + 'style="width:40px;background:transparent;border:none;color:white;font-size:12px;font-weight:700;text-align:center;outline:none" '
       + 'onchange="atualizarQtyVenda(\'' + p.codigo + '\',this.value)">'
       + '</div>'
-      + '<span style="color:#22C55E;font-size:11px;font-weight:600">= R$ ' + f(subtProd) + '</span>'
+      + '<label style="display:flex;align-items:center;gap:3px;cursor:pointer" title="Marcar como bonificação nesta venda">'
+      + '<input type="checkbox" ' + (isBoni?'checked':'') + ' onchange="toggleBoniVenda(\'' + p.codigo + '\',this.checked)" style="accent-color:#F59E0B;width:12px;height:12px">'
+      + '<span style="color:rgba(255,255,255,.6);font-size:10px">Boni</span>'
+      + '</label>'
+      + (isBoni ? '<span style="color:#FCD34D;font-size:11px;font-weight:600">= R$ 0,00</span>' : '<span style="color:#22C55E;font-size:11px;font-weight:600">= R$ ' + f(subtProd) + '</span>')
       + '<span onclick="removerProdutoSelecionado(\'' + p.codigo + '\')" '
       + 'style="color:rgba(255,255,255,.5);cursor:pointer;font-size:16px;line-height:1;padding:0 2px" title="Remover">×</span>'
       + '</div>';
   }).join('');
 
-  const subtotal = sel.reduce(function(a,p){return a+(Number(p.venda)*(p.qty||1));},0);
+  const subtotal = sel.reduce(function(a,p){
+    const isBoni = p.bonificacao||p._isBoni||false;
+    return a + (isBoni ? 0 : Number(p.venda)*(p.qty||1));
+  },0);
   const total    = subtotal * (1-descPct/100);
   const prev = document.getElementById('v-preview');
   const tot  = document.getElementById('v-total');
@@ -1785,16 +1821,27 @@ async function registrarVenda() {
   const status  = document.getElementById('v-status').value;
   if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
   if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
+  // Separa itens normais e bonificações
+  const itensBoni = sel.filter(p=>p.bonificacao||p._isBoni).map(p=>p.codigo);
   const codigos = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
-  let total = sel.reduce((a,p)=>a+(Number(p.venda)*(p.qty||1)),0) * (1-desc/100);
+  const itensBoniStr = itensBoni.join(',');
+  // Total exclui bonificações
+  let total = sel.reduce((a,p)=>{
+    if(p.bonificacao||p._isBoni) return a;
+    return a+(Number(p.venda)*(p.qty||1));
+  },0) * (1-desc/100);
   const obs = document.getElementById('v-obs')?.value.trim()||'';
   const { error } = await sb.from('vendas').insert({
-    user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data, observacao:obs
+    user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data, observacao:obs, itens_bonificacao:itensBoniStr
   });
   if (error) { showToast('Erro ao registrar venda','error'); return; }
   for (const p of sel) {
-    const { data: prod } = await sb.from('produtos').select('estoque').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
-    if (prod && prod.estoque > 0) await sb.from('produtos').update({estoque:prod.estoque-1}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
+    const qty = p.qty||1;
+    const { data: prod } = await sb.from('produtos').select('estoque,bonificacao').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
+    if (prod && prod.estoque > 0) {
+      const novoEstq = Math.max(0, prod.estoque - qty);
+      await sb.from('produtos').update({estoque: novoEstq}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
+    }
   }
   window._produtosSelecionados = [];
   showToast('Venda registrada com sucesso!','success');
