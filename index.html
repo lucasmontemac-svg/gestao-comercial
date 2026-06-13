@@ -933,12 +933,15 @@ function buscarProdutoEntrada(termo) {
   const t = termo.toLowerCase();
   const matches = prods.filter(p => (p.nome||'').toLowerCase().includes(t) || (p.codigo||'').toLowerCase().includes(t)).slice(0,8);
   if (!matches.length) { sug.innerHTML='<div style="padding:10px 12px;font-size:12px;color:var(--gray-400)">Nenhum produto encontrado</div>'; sug.style.display='block'; return; }
-  sug.innerHTML = matches.map(p=>`<div onclick="selecionarProdutoEntrada('${p.codigo}',${JSON.stringify(p.nome)})"
+  sug.innerHTML = matches.map(p=>{
+    const nomeEsc = (p.nome||'').replace(/'/g,"\\'");
+    return `<div onclick="selecionarProdutoEntrada('${p.codigo}','${nomeEsc}')"
     style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100)"
     onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
     <strong>${p.codigo}</strong> — ${p.nome}
     ${p.estoque<=3?'<span style="margin-left:6px;font-size:10px;color:var(--red)">⚠️ estoque baixo</span>':''}
-  </div>`).join('');
+  </div>`;
+  }).join('');
   sug.style.display='block';
 }
 
@@ -1565,11 +1568,14 @@ function buscarProdutoHistorico(termo) {
   const t = termo.toLowerCase();
   const matches = prods.filter(p => (p.nome||'').toLowerCase().includes(t) || (p.codigo||'').toLowerCase().includes(t)).slice(0,8);
   if (!matches.length) { sug.innerHTML='<div style="padding:10px 12px;font-size:12px;color:var(--gray-400)">Nenhum produto encontrado</div>'; sug.style.display='block'; return; }
-  sug.innerHTML = matches.map(p=>`<div onclick="selecionarProdutoHistorico('${p.codigo}',${JSON.stringify(p.nome)})"
+  sug.innerHTML = matches.map(p=>{
+    const nomeEsc = (p.nome||'').replace(/'/g,"\\'");
+    return `<div onclick="selecionarProdutoHistorico('${p.codigo}','${nomeEsc}')"
     style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100)"
     onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
     <strong>${p.codigo}</strong> — ${p.nome}
-  </div>`).join('');
+  </div>`;
+  }).join('');
   sug.style.display='block';
 }
 
