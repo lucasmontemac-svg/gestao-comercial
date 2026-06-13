@@ -1663,11 +1663,118 @@ function renderVendasRows(vendas) {
       <td style="font-size:12px;color:var(--gray-600);max-width:150px">${v.observacao||'—'}</td>
       <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
       <td style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-outline" title="Gerar pedido em PDF" onclick="gerarPedidoPDF('${v.id}')">🧾</button>
         <button class="btn btn-sm btn-outline" onclick="openEditVenda('${v.id}','${v.cliente||''}','${v.telefone||''}','${v.codigos||''}','${v.data_venda||''}',${v.desconto||0},${v.total||0},'${v.status}','${(v.observacao||'')}')">✏️</button>
         <button class="btn btn-sm btn-danger" onclick="excluirVenda('${v.id}','${v.cliente||''}')">🗑</button>
       </td>
     </tr>`;
   }).join('');
+}
+
+function gerarPedidoPDF(id) {
+  const venda = (window._vendasAll||[]).find(v=>v.id===id);
+  if (!venda) { showToast('Venda não encontrada','error'); return; }
+
+  const prods = window._produtosVenda||[];
+  const codes = (venda.codigos||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const boniSet = new Set((venda.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+
+  // Agrupa por código com quantidade
+  const grouped = {};
+  codes.forEach(c => { grouped[c] = (grouped[c]||0) + 1; });
+
+  const itens = Object.entries(grouped).map(([cod, qty]) => {
+    const p = prods.find(x=>x.codigo===cod);
+    const nome = p ? p.nome : cod;
+    const isBoni = boniSet.has(cod.toUpperCase());
+    const valorUnit = isBoni ? 0 : (p ? Number(p.venda) : 0);
+    return { nome, qty, valorUnit, subtotal: valorUnit*qty, isBoni };
+  });
+
+  const totalPedido = Number(venda.total)||0;
+  const descPct = Number(venda.desconto)||0;
+  const subtotalBruto = (descPct > 0 && descPct < 100) ? totalPedido / (1-descPct/100) : totalPedido;
+  const valorDesconto = subtotalBruto - totalPedido;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const lojaNome = (currentProfile&&currentProfile.loja) ? currentProfile.loja : (currentProfile&&currentProfile.name) ? currentProfile.name : 'Gestão Comercial Pro';
+
+  // Header
+  doc.setFillColor(15,28,46);
+  doc.rect(0,0,210,28,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text(lojaNome.toUpperCase(), 14, 13);
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text('PEDIDO DE VENDA', 14, 21);
+
+  doc.setFontSize(9);
+  const dataFmt = venda.data_venda ? venda.data_venda.split('-').reverse().join('/') : '—';
+  doc.text('Data: ' + dataFmt, 196, 13, {align:'right'});
+  doc.text('Status: ' + (venda.status==='pago'?'PAGO':'PENDENTE'), 196, 21, {align:'right'});
+
+  // Dados do cliente
+  let y = 38;
+  doc.setTextColor(30,41,59);
+  doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text('DADOS DO CLIENTE', 14, y); y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text('Cliente: ' + (venda.cliente||'—'), 14, y); y+=5;
+  if (venda.telefone) { doc.text('Telefone: ' + venda.telefone, 14, y); y+=5; }
+  if (venda.contato)  { doc.text('Contato via: ' + venda.contato, 14, y); y+=5; }
+  y += 4;
+
+  // Tabela de produtos
+  doc.autoTable({
+    startY:y, margin:{left:14,right:14},
+    head:[['Produto','Qtd','Valor Unit.','Subtotal']],
+    body: itens.map(i => [
+      i.nome + (i.isBoni?'  🎁 BONIFICAÇÃO':''),
+      i.qty.toString(),
+      i.isBoni ? 'R$ 0,00' : 'R$ ' + f(i.valorUnit),
+      i.isBoni ? 'R$ 0,00' : 'R$ ' + f(i.subtotal),
+    ]),
+    styles:{fontSize:10, cellPadding:4},
+    headStyles:{fillColor:[46,117,182], textColor:255, fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[248,250,252]},
+    columnStyles:{
+      0:{cellWidth:90}, 1:{cellWidth:20,halign:'center'},
+      2:{cellWidth:35,halign:'right'}, 3:{cellWidth:37,halign:'right'}
+    },
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+
+  // Totais
+  const boxW = 75;
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  if (descPct > 0) {
+    doc.text('Subtotal:', 196-boxW, y); doc.text('R$ ' + f(subtotalBruto), 196, y, {align:'right'}); y+=6;
+    doc.text('Desconto (' + descPct.toFixed(1) + '%):', 196-boxW, y); doc.text('- R$ ' + f(Math.max(0,valorDesconto)), 196, y, {align:'right'}); y+=6;
+  }
+  doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.setDrawColor(46,117,182);
+  doc.line(196-boxW, y-2, 196, y-2);
+  doc.text('TOTAL:', 196-boxW, y+4); doc.text('R$ ' + f(totalPedido), 196, y+4, {align:'right'});
+  y += 14;
+
+  // Observação
+  if (venda.observacao) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('Observação:', 14, y); y+=5;
+    doc.setFont('helvetica','normal');
+    doc.text(doc.splitTextToSize(venda.observacao, 180), 14, y);
+    y += 10;
+  }
+
+  // Footer
+  doc.setFontSize(8); doc.setTextColor(150);
+  doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR').slice(0,5) + ' — ' + lojaNome, 14, 285);
+
+  const nomeArq = 'pedido_' + (venda.cliente||'cliente').replace(/[^a-zA-Z0-9]/g,'_') + '_' + (venda.data_venda||'');
+  doc.save(nomeArq + '.pdf');
+  showToast('Pedido em PDF gerado!','success');
 }
 
 function filtrarVendas(termo) {
