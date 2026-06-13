@@ -1811,9 +1811,44 @@ async function excluirVenda(id, cliente) {
 }
 
 async function confirmarExclusaoVenda(id) {
+  // Busca a venda para recuperar os produtos
+  const { data: venda } = await sb.from('vendas').select('codigos,itens_bonificacao').eq('id', id).maybeSingle();
+
+  if (venda && venda.codigos) {
+    const codigos = venda.codigos.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    const boniCods = new Set((venda.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+
+    // Conta quantas vezes cada código aparece
+    const qtdPorCod = {};
+    codigos.forEach(c => { qtdPorCod[c] = (qtdPorCod[c]||0) + 1; });
+
+    // Devolve ao estoque
+    for (const [cod, qty] of Object.entries(qtdPorCod)) {
+      const { data: prod } = await sb.from('produtos')
+        .select('estoque,estoque_bonificacao')
+        .eq('user_id', currentUser.id)
+        .eq('codigo', cod)
+        .maybeSingle();
+
+      if (prod) {
+        if (boniCods.has(cod)) {
+          // Devolve ao estoque de bonificação
+          await sb.from('produtos').update({
+            estoque_bonificacao: (prod.estoque_bonificacao||0) + qty
+          }).eq('user_id', currentUser.id).eq('codigo', cod);
+        } else {
+          // Devolve ao estoque normal
+          await sb.from('produtos').update({
+            estoque: (prod.estoque||0) + qty
+          }).eq('user_id', currentUser.id).eq('codigo', cod);
+        }
+      }
+    }
+  }
+
   await sb.from('vendas').delete().eq('id', id);
   closeModal();
-  showToast('Venda excluída!','success');
+  showToast('✅ Venda excluída e estoque devolvido!','success');
   navigate('vendas');
 }
 
