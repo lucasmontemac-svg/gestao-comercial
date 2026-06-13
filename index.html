@@ -857,6 +857,13 @@ async function renderEstoque(c) {
         <div class="form-group"><label>Data de Entrada</label><input type="date" id="entrada-data" value="${new Date().toISOString().split('T')[0]}"></div>
         <div class="form-group"><label>Observação</label><input type="text" id="entrada-obs" placeholder="Ex: estoque inicial"></div>
       </div>
+      <div style="margin-top:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+        <input type="checkbox" id="entrada-bonificacao" style="width:16px;height:16px;accent-color:var(--yellow)">
+        <div>
+          <label for="entrada-bonificacao" style="font-size:13px;font-weight:600;color:#92400E;cursor:pointer">🎁 Esta entrada é uma BONIFICAÇÃO do fornecedor</label>
+          <div style="font-size:11px;color:#B45309;margin-top:2px">A quantidade entrará no estoque de bonificação separado, sem custo.</div>
+        </div>
+      </div>
       <div style="margin-top:16px"><button class="btn btn-success" onclick="registrarEntrada()">✅ Registrar Entrada</button></div>
     </div>
 
@@ -909,7 +916,7 @@ function renderProdutoRows(produtos) {
       <td>${p.nome}${p.bonificacao?'<span style="margin-left:6px;font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:10px">🎁 Bonificação</span>':''}</td>
       <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
       <td>R$ ${f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
-      <td style="${p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${p.estoque} un.</td>
+      <td style="${p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${p.estoque} un.${p.estoque_bonificacao>0?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 5px;border-radius:10px;font-weight:700">🎁 +${p.estoque_bonificacao}</span>`:''}</td>
       <td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" title="Editar" onclick='openEditProduto(${JSON.stringify(p)})'>✏️</button>
@@ -1265,12 +1272,26 @@ async function registrarEntrada() {
   const qtd    = parseInt(document.getElementById('entrada-qtd').value)||0;
   const data   = document.getElementById('entrada-data').value;
   const obs    = document.getElementById('entrada-obs').value;
+  const isBoni = document.getElementById('entrada-bonificacao')?.checked||false;
   if (!qtd || qtd <= 0) { showToast('Informe uma quantidade válida', 'error'); return; }
   const uid = currentUser.id;
-  await sb.from('entradas_estoque').insert({ user_id:uid, codigo, quantidade:qtd, data_entrada:data, observacao:obs });
-  const { data: prod } = await sb.from('produtos').select('estoque').eq('user_id',uid).eq('codigo',codigo).single();
-  if (prod) await sb.from('produtos').update({ estoque: prod.estoque + qtd }).eq('user_id',uid).eq('codigo',codigo);
-  showToast('Entrada registrada com sucesso!','success');
+  await sb.from('entradas_estoque').insert({
+    user_id:uid, codigo, quantidade:qtd, data_entrada:data,
+    observacao:(isBoni?'[BONIFICAÇÃO] ':'')+obs
+  });
+  const { data: prod } = await sb.from('produtos').select('estoque,estoque_bonificacao').eq('user_id',uid).eq('codigo',codigo).maybeSingle();
+  if (prod) {
+    if (isBoni) {
+      await sb.from('produtos').update({
+        estoque_bonificacao: (prod.estoque_bonificacao||0) + qtd
+      }).eq('user_id',uid).eq('codigo',codigo);
+    } else {
+      await sb.from('produtos').update({
+        estoque: (prod.estoque||0) + qtd
+      }).eq('user_id',uid).eq('codigo',codigo);
+    }
+  }
+  showToast(isBoni ? '🎁 Bonificação registrada no estoque!' : '✅ Entrada registrada com sucesso!','success');
   navigate('estoque');
 }
 
@@ -1837,10 +1858,18 @@ async function registrarVenda() {
   if (error) { showToast('Erro ao registrar venda','error'); return; }
   for (const p of sel) {
     const qty = p.qty||1;
-    const { data: prod } = await sb.from('produtos').select('estoque,bonificacao').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
-    if (prod && prod.estoque > 0) {
-      const novoEstq = Math.max(0, prod.estoque - qty);
-      await sb.from('produtos').update({estoque: novoEstq}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
+    const isBoniItem = p.bonificacao||p._isBoni||false;
+    const { data: prod } = await sb.from('produtos').select('estoque,estoque_bonificacao,bonificacao').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
+    if (prod) {
+      if (isBoniItem) {
+        // Saída do estoque de bonificação
+        const novoBoni = Math.max(0, (prod.estoque_bonificacao||0) - qty);
+        await sb.from('produtos').update({estoque_bonificacao: novoBoni}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
+      } else {
+        // Saída do estoque normal
+        const novoEstq = Math.max(0, (prod.estoque||0) - qty);
+        await sb.from('produtos').update({estoque: novoEstq}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
+      }
     }
   }
   window._produtosSelecionados = [];
