@@ -3200,9 +3200,10 @@ function renderDespFixos(todas) {
   const grupos = {};
   todas.forEach(d => {
     const key = (d.descricao||'').trim().toLowerCase();
-    if (!grupos[key]) grupos[key] = { descricao: d.descricao, categoria: d.categoria, valores: [], status: [] };
+    if (!grupos[key]) grupos[key] = { descricao: d.descricao, categoria: d.categoria, valores: [], status: [], ids: [] };
     grupos[key].valores.push(Number(d.valor));
     grupos[key].status.push(d.status);
+    grupos[key].ids.push(d.id);
   });
 
   // Filtra só os que aparecem mais de uma vez (recorrentes) OU categoria Fixo
@@ -3227,6 +3228,9 @@ function renderDespFixos(todas) {
     const media = g.valores.reduce((a,b)=>a+b,0)/g.valores.length;
     const ultimo = g.valores[g.valores.length-1];
     const variou = g.valores.length > 1 && Math.max(...g.valores) !== Math.min(...g.valores);
+    // IDs dos lançamentos deste grupo para excluir todos
+    const ids = g.ids||[];
+    const idsJson = JSON.stringify(ids).replace(/"/g,'&quot;');
     return `<tr style="border-bottom:1px solid var(--gray-100)">
       <td style="padding:10px 12px;font-size:13px">
         <strong>${g.descricao}</strong>
@@ -3240,10 +3244,11 @@ function renderDespFixos(todas) {
         ${variou ? '<br><span style="color:var(--yellow);font-size:10px">⚠️ Valor variou</span>' : ''}
       </td>
       <td style="padding:10px 12px;text-align:center">
-        <div style="display:flex;gap:4px;justify-content:center">
+        <div style="display:flex;gap:4px;justify-content:center;align-items:center">
           ${g.status[g.status.length-1]==='pago'
             ? '<span class="badge badge-green">✅ Pago</span>'
             : '<span class="badge badge-yellow">⏳ Pendente</span>'}
+          <button class="btn btn-sm btn-danger" onclick="excluirLancamentosFixos('${g.descricao}','${idsJson}')" title="Excluir todos os lançamentos">🗑</button>
         </div>
       </td>
     </tr>`;
@@ -3268,7 +3273,7 @@ function renderDespFixos(todas) {
       <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Frequência</th>
       <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Último Valor</th>
       <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Histórico</th>
-      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Status Atual</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Status / Ação</th>
     </tr></thead>
     <tbody>
       ${fixos.map(g=>renderLinha(g,true)).join('')}
@@ -3279,6 +3284,33 @@ function renderDespFixos(todas) {
   <div style="margin-top:16px;background:rgba(46,117,182,.06);border:1px solid rgba(46,117,182,.15);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--blue)">
     💡 <strong>Dica:</strong> Para identificar automaticamente como fixo, use sempre o mesmo nome ao lançar (ex: "Aluguel") ou marque a categoria como "Fixo".
   </div>`;
+}
+
+async function excluirLancamentosFixos(descricao, idsJson) {
+  let ids;
+  try { ids = JSON.parse(idsJson); } catch(e) { ids = []; }
+  if (!ids.length) { showToast('Nenhum lançamento encontrado','error'); return; }
+
+  document.getElementById('modal-body').innerHTML = [
+    '<h3>🗑 Excluir Lançamentos Fixos</h3>',
+    '<p style="font-size:14px;color:var(--gray-600);margin-bottom:8px">Deseja excluir <strong>' + ids.length + '</strong> lançamento(s) de <strong>"' + descricao + '"</strong>?</p>',
+    '<p style="font-size:12px;color:var(--gray-400);margin-bottom:20px">Esta ação excluirá <strong>todos</strong> os registros deste lançamento e não pode ser desfeita.</p>',
+    '<div class="modal-footer">',
+      '<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>',
+      '<button class="btn btn-danger" id="del-fixo-btn">🗑 Excluir todos (' + ids.length + ')</button>',
+    '</div>'
+  ].join('');
+
+  document.getElementById('del-fixo-btn').addEventListener('click', async function() {
+    for (const id of ids) {
+      await sb.from('despesas').delete().eq('id', id);
+    }
+    closeModal();
+    showToast('✅ ' + ids.length + ' lançamento(s) excluído(s)!', 'success');
+    navigate('despesas');
+  });
+
+  openModal();
 }
 
 async function exportarDespesasExcel() {
