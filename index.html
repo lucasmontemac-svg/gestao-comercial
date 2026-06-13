@@ -1888,6 +1888,20 @@ async function registrarVenda() {
   const status  = document.getElementById('v-status').value;
   if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
   if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
+
+  // ── VALIDAÇÃO DE ESTOQUE — bloqueia venda se não houver quantidade suficiente ──
+  for (const p of sel) {
+    const qty = p.qty||1;
+    const isBoniItem = p.bonificacao||p._isBoni||false;
+    const { data: prod } = await sb.from('produtos').select('estoque,estoque_bonificacao').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
+    const disponivel = isBoniItem ? (prod?.estoque_bonificacao||0) : (prod?.estoque||0);
+    if (qty > disponivel) {
+      const tipoEstq = isBoniItem ? 'de bonificação' : '';
+      showToast(`❌ Estoque insuficiente para ${p.nome}: disponível ${disponivel} ${tipoEstq}, solicitado ${qty}`, 'error');
+      return; // bloqueia a venda
+    }
+  }
+
   // Separa itens normais e bonificações
   const itensBoni = sel.filter(p=>p.bonificacao||p._isBoni).map(p=>p.codigo);
   const codigos = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
@@ -1908,11 +1922,9 @@ async function registrarVenda() {
     const { data: prod } = await sb.from('produtos').select('estoque,estoque_bonificacao,bonificacao').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
     if (prod) {
       if (isBoniItem) {
-        // Saída do estoque de bonificação
         const novoBoni = Math.max(0, (prod.estoque_bonificacao||0) - qty);
         await sb.from('produtos').update({estoque_bonificacao: novoBoni}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
       } else {
-        // Saída do estoque normal
         const novoEstq = Math.max(0, (prod.estoque||0) - qty);
         await sb.from('produtos').update({estoque: novoEstq}).eq('user_id',currentUser.id).eq('codigo',p.codigo);
       }
