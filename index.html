@@ -1672,10 +1672,11 @@ function renderVendasRows(vendas) {
 }
 
 function gerarPedidoPDF(id) {
-  const venda = (window._vendasAll||[]).find(v=>v.id===id);
+  const todasVendas = (window._vendasAll||[]).length ? window._vendasAll : (window._resumoVendas||[]);
+  const venda = todasVendas.find(v=>v.id===id);
   if (!venda) { showToast('Venda não encontrada','error'); return; }
 
-  const prods = window._produtosVenda||[];
+  const prods = (window._produtosVenda||[]).length ? window._produtosVenda : (window._resumoProdutos||[]);
   const codes = (venda.codigos||'').split(',').map(s=>s.trim()).filter(Boolean);
   const boniSet = new Set((venda.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
 
@@ -2533,7 +2534,14 @@ function renderTabClientes(vendas) {
   });
   const lista = Object.values(clMap).sort((a,b)=>b.total-a.total);
   if (!lista.length) return '<div class="empty-state"><div class="icon">👥</div><p>Nenhuma venda no período</p></div>';
-  return `<table style="width:100%;border-collapse:collapse">
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <strong style="font-family:Sora;font-size:14px;color:var(--navy)">Resumo por Cliente</strong>
+    <input type="text" id="busca-cliente" placeholder="🔍 Buscar cliente..."
+      style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:220px"
+      oninput="filtrarClientes(this.value)">
+  </div>
+  <table style="width:100%;border-collapse:collapse">
     <thead><tr>
       <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">#</th>
       <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Cliente</th>
@@ -2541,16 +2549,111 @@ function renderTabClientes(vendas) {
       <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Total Gasto</th>
       <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Ticket Médio</th>
       <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Última Compra</th>
+      <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Ações</th>
     </tr></thead>
-    <tbody>${lista.map((cl,i)=>`<tr style="border-bottom:1px solid var(--gray-100)">
+    <tbody id="tbody-clientes">${lista.map((cl,i)=>{
+      const nomeEsc = cl.nome.replace(/'/g,"\\'");
+      return `<tr data-nome="${cl.nome.toLowerCase()}" style="border-bottom:1px solid var(--gray-100)">
       <td style="padding:10px 12px;font-size:13px;color:var(--gray-400)">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>
       <td style="padding:10px 12px"><strong style="font-size:13px">${cl.nome}</strong><br><span style="font-size:11px;color:var(--gray-400)">${cl.tel}</span></td>
       <td style="padding:10px 12px;text-align:center;font-size:13px">${cl.qtd}</td>
       <td style="padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:var(--green-dim)">R$ ${f(cl.total)}</td>
       <td style="padding:10px 12px;text-align:right;font-size:13px">R$ ${f(cl.total/cl.qtd)}</td>
-      <td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--gray-400)">${cl.ultData||'—'}</td>
-    </tr>`).join('')}</tbody>
+      <td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--gray-400)">${cl.ultData?cl.ultData.split('-').reverse().join('/'):'—'}</td>
+      <td style="padding:10px 12px;text-align:center">
+        <button class="btn btn-sm btn-outline" onclick="abrirComprasCliente('${nomeEsc}')">👁 Ver Compras</button>
+      </td>
+    </tr>`;
+    }).join('')}</tbody>
   </table>`;
+}
+
+function filtrarClientes(termo) {
+  const rows = document.querySelectorAll('#tbody-clientes tr[data-nome]');
+  const t = termo.toLowerCase();
+  rows.forEach(r => { r.style.display = (r.dataset.nome||'').includes(t) ? '' : 'none'; });
+}
+
+function abrirComprasCliente(nomeCliente) {
+  const vendas = window._resumoVendas||[];
+  const prods  = window._resumoProdutos||[];
+
+  const compras = vendas.filter(v=>v.cliente===nomeCliente).sort((a,b)=>(b.data_venda||'').localeCompare(a.data_venda||''));
+  if (!compras.length) { showToast('Nenhuma compra encontrada','error'); return; }
+
+  // Agrega produtos comprados
+  const prodMap = {};
+  compras.forEach(v=>{
+    const codes = (v.codigos||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const boniSet = new Set((v.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+    codes.forEach(c=>{
+      const p = prods.find(x=>x.codigo===c);
+      const nome = p?p.nome:c;
+      if(!prodMap[nome]) prodMap[nome]={qty:0,boniQty:0};
+      if(boniSet.has(c.toUpperCase())) prodMap[nome].boniQty++;
+      else prodMap[nome].qty++;
+    });
+  });
+  const prodLista = Object.entries(prodMap).sort((a,b)=>(b[1].qty+b[1].boniQty)-(a[1].qty+a[1].boniQty));
+
+  const totalGasto = compras.reduce((a,v)=>a+Number(v.total),0);
+  const totalPend  = compras.filter(v=>v.status==='pendente').reduce((a,v)=>a+Number(v.total),0);
+  const tel = compras[0]?.telefone||'';
+
+  document.getElementById('modal-body').innerHTML = `
+    <h3>👤 ${nomeCliente}</h3>
+    ${tel?`<p style="font-size:12px;color:var(--gray-400);margin-top:-8px;margin-bottom:12px">${tel}</p>`:''}
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:1;background:var(--gray-50);border-radius:8px;padding:12px;text-align:center;min-width:100px">
+        <div style="font-size:11px;color:var(--gray-400)">TOTAL GASTO</div>
+        <div style="font-size:18px;font-weight:800;font-family:Sora;color:var(--green-dim)">R$ ${f(totalGasto)}</div>
+      </div>
+      <div style="flex:1;background:var(--gray-50);border-radius:8px;padding:12px;text-align:center;min-width:100px">
+        <div style="font-size:11px;color:var(--gray-400)">Nº COMPRAS</div>
+        <div style="font-size:18px;font-weight:800;font-family:Sora;color:var(--blue)">${compras.length}</div>
+      </div>
+      ${totalPend>0?`<div style="flex:1;background:#FEF3C7;border-radius:8px;padding:12px;text-align:center;min-width:100px">
+        <div style="font-size:11px;color:#92400E">PENDENTE</div>
+        <div style="font-size:18px;font-weight:800;font-family:Sora;color:#92400E">R$ ${f(totalPend)}</div>
+      </div>`:''}
+    </div>
+
+    <div style="font-family:Sora;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px">📦 Produtos Comprados</div>
+    <div style="max-height:160px;overflow-y:auto;margin-bottom:16px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Produto</th>
+          <th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Qtd</th>
+        </tr></thead>
+        <tbody>${prodLista.map(([nome,d])=>`<tr style="border-bottom:1px solid var(--gray-100)">
+          <td style="padding:6px 8px;font-size:12px">${nome}</td>
+          <td style="padding:6px 8px;text-align:center;font-size:12px;font-weight:600">${d.qty}${d.boniQty>0?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 5px;border-radius:8px">🎁 +${d.boniQty}</span>`:''}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+
+    <div style="font-family:Sora;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px">🧾 Histórico de Compras</div>
+    <div style="max-height:200px;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Data</th>
+          <th style="text-align:right;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Total</th>
+          <th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Status</th>
+          <th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Pedido</th>
+        </tr></thead>
+        <tbody>${compras.map(v=>`<tr style="border-bottom:1px solid var(--gray-100)">
+          <td style="padding:6px 8px;font-size:12px">${v.data_venda?v.data_venda.split('-').reverse().join('/'):'—'}</td>
+          <td style="padding:6px 8px;text-align:right;font-size:12px;font-weight:600">R$ ${f(v.total)}</td>
+          <td style="padding:6px 8px;text-align:center"><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅':'⏳'}</span></td>
+          <td style="padding:6px 8px;text-align:center"><button class="btn btn-sm btn-outline" onclick="gerarPedidoPDF('${v.id}')">🧾</button></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Fechar</button>
+    </div>`;
+  openModal();
 }
 
 // ── TAB: RANKINGS ──────────────────────────────────────────────
