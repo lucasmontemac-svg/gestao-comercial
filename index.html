@@ -570,6 +570,7 @@ const TITLES = {
 };
 
 async function navigate(view) {
+  window._currentView = view;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('nav-'+view)?.classList.add('active');
   document.getElementById('topbar-title').textContent = TITLES[view] || view;
@@ -1494,7 +1495,6 @@ async function renderVendas(c) {
   ]);
   window._produtosVenda = produtos||[]; // garante que está atualizado
   window._clientesCad = clientesCad||[];
-  const prodsB64 = btoa(unescape(encodeURIComponent(JSON.stringify(produtos||[]))));
   c.innerHTML = `
   <div class="form-card">
     <div class="section-title">Registrar Nova Venda</div>
@@ -2490,18 +2490,6 @@ async function confirmarExclusaoVenda(id) {
   navigate('vendas');
 }
 
-
-function previewV(val, produtosJson) {
-  try {
-    const produtos = JSON.parse(produtosJson.replace(/&quot;/g,'"'));
-    const preview = document.getElementById('v-preview');
-    const totalEl = document.getElementById('v-total');
-    if (!val.trim()) { preview.textContent=''; totalEl.textContent=''; return; }
-    const codes = val.toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
-    const names = codes.map(c=>{const p=produtos.find(x=>x.codigo===c);return p?p.nome:`${c} (não encontrado)`;});
-    preview.textContent = '→ ' + names.join(' • ');
-  } catch(e) {}
-}
 
 async function registrarVenda() {
   const sel     = window._produtosSelecionados||[];
@@ -3653,13 +3641,6 @@ async function exportarPDF() {
   doc.save(`relatorio_${de}_${ate}.pdf`);
   showToast('PDF exportado com sucesso!','success');
 }
-
-function filtrarResumo(termo) {
-  const rows = document.querySelectorAll('#tbody-resumo tr[data-nome]');
-  const t = termo.toLowerCase();
-  rows.forEach(r=>{ r.style.display=(r.dataset.nome||'').includes(t)?'':'none'; });
-}
-
 
 async function renderPrecos(c) {
   const { data: produtosRaw } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
@@ -4853,6 +4834,34 @@ async function salvarEdicaoCliente(id) {
   navigate('admin-planos');
 }
 
+
+async function adminToggleUser(id, status) {
+  const novo = status==='active' ? 'blocked' : 'active';
+  const { error } = await sb.from('profiles').update({status:novo}).eq('id', id);
+  if (error) { showToast('Erro ao atualizar status','error'); return; }
+  showToast(novo==='active' ? '✅ Cliente liberado!' : '🔒 Cliente bloqueado!','success');
+  navigate(window._currentView||'admin-dash');
+}
+
+async function adminResetDevice(id) {
+  const { error } = await sb.from('profiles').update({device_id:null}).eq('id', id);
+  if (error) { showToast('Erro ao resetar dispositivo','error'); return; }
+  // Remove também dispositivos aprovados anteriormente
+  await sb.from('device_requests').delete().eq('user_id', id).eq('status','approved');
+  showToast('📱 Dispositivo resetado! O cliente poderá acessar de um novo aparelho.','success');
+  navigate(window._currentView||'admin-dash');
+}
+
+async function adminRenew(id, days) {
+  days = days || 30;
+  const { data: p } = await sb.from('profiles').select('expiry_date').eq('id',id).single();
+  const base = p?.expiry_date && new Date(p.expiry_date) > new Date() ? new Date(p.expiry_date) : new Date();
+  base.setDate(base.getDate()+days);
+  const { error } = await sb.from('profiles').update({expiry_date:base.toISOString().split('T')[0], status:'active'}).eq('id',id);
+  if (error) { showToast('Erro ao renovar assinatura','error'); return; }
+  showToast(`✅ Assinatura renovada por ${days} dias!`,'success');
+  navigate(window._currentView||'admin-planos');
+}
 
 async function adminRenewForm() {
   const id   = document.getElementById('renew-user').value;
