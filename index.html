@@ -592,15 +592,17 @@ async function renderDashboard(c) {
   const inicioSemana = new Date(hoje - 7*24*60*60*1000).toISOString().split('T')[0];
   const hojeStr = hoje.toISOString().split('T')[0];
 
-  const [{ data: vendas }, { data: produtos }, { data: despesas }] = await Promise.all([
+  const [{ data: vendas }, { data: produtos }, { data: despesas }, { data: parcelas }] = await Promise.all([
     sb.from('vendas').select('*').eq('user_id', uid),
     sb.from('produtos').select('*').eq('user_id', uid),
     sb.from('despesas').select('*').eq('user_id', uid),
+    sb.from('parcelas').select('*').eq('user_id', uid).order('vencimento'),
   ]);
 
   const todasVendas = vendas||[];
   const todosProdutos = produtos||[];
   const todasDespesas = despesas||[];
+  const todasParcelas = parcelas||[];
 
   // ── Métricas base ──
   const vendasMes    = todasVendas.filter(v => v.data_venda >= inicioMes);
@@ -608,7 +610,8 @@ async function renderDashboard(c) {
   const vendasHoje   = todasVendas.filter(v => v.data_venda === hojeStr);
 
   const receitaMes    = vendasMes.reduce((a,v)=>a+Number(v.total),0);
-  const vendasPendentes = todasVendas.filter(v=>v.status==='pendente').sort((a,b)=>(a.data_venda||'').localeCompare(b.data_venda||''));
+  const vendasPendentes = todasVendas.filter(v=>v.status==='pendente' && v.forma_pagamento!=='Promissória').sort((a,b)=>(a.data_venda||'').localeCompare(b.data_venda||''));
+  const parcelasPendentes = todasParcelas.filter(p=>p.status==='pendente').sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||''));
   const receitaSemana = vendasSemana.reduce((a,v)=>a+Number(v.total),0);
   const receitaHoje   = vendasHoje.reduce((a,v)=>a+Number(v.total),0);
   const receitaTotal  = todasVendas.reduce((a,v)=>a+Number(v.total),0);
@@ -791,30 +794,48 @@ async function renderDashboard(c) {
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="section-title" style="margin:0">⏳ Vendas Pendentes</div>
-        ${vendasPendentes.length>0?`<span style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px">${vendasPendentes.length} pendente(s)</span>`:''}
+        ${(vendasPendentes.length+parcelasPendentes.length)>0?`<span style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px">${vendasPendentes.length+parcelasPendentes.length} pendente(s)</span>`:''}
       </div>
-      <div class="table-card" style="${vendasPendentes.length===0?'':'border:1px solid rgba(245,158,11,.3)'}">
-        ${vendasPendentes.length===0
+      <div class="table-card" style="${(vendasPendentes.length+parcelasPendentes.length)===0?'':'border:1px solid rgba(245,158,11,.3)'}">
+        ${(vendasPendentes.length+parcelasPendentes.length)===0
           ? '<div style="padding:32px;text-align:center;color:var(--green-dim)"><div style="font-size:32px;margin-bottom:8px">✅</div><div style="font-size:13px;font-weight:600">Nenhuma venda pendente!</div></div>'
           : `<table>
             <thead><tr>
               <th>Cliente</th><th>Data</th><th>Total</th><th>Ação</th>
             </tr></thead>
-            <tbody>${vendasPendentes.map(v=>`<tr style="background:rgba(245,158,11,.04)">
+            <tbody>
+              ${vendasPendentes.map(v=>`<tr style="background:rgba(245,158,11,.04)">
               <td>
                 <strong>${v.cliente||'—'}</strong>
                 ${v.observacao?`<br><span style="font-size:10px;color:var(--gray-400)">${v.observacao}</span>`:''}
+                ${v.forma_pagamento&&v.forma_pagamento!=='Dinheiro'?`<br><span style="font-size:10px;color:var(--gray-400)">${v.forma_pagamento==='PIX'?'📱':v.forma_pagamento==='Cartão'?'💳':'💵'} ${v.forma_pagamento}</span>`:''}
               </td>
               <td style="font-size:12px">${v.data_venda||'—'}</td>
               <td><strong style="color:var(--yellow)">R$ ${f(v.total)}</strong></td>
               <td>
                 <button class="btn btn-sm btn-success" onclick="pagarVendaDash('${v.id}')" title="Marcar como pago">✅ Pagar</button>
               </td>
-            </tr>`).join('')}</tbody>
+            </tr>`).join('')}
+              ${parcelasPendentes.map(p=>{
+                const hoje = new Date().toISOString().split('T')[0];
+                const vencida = p.vencimento && p.vencimento < hoje;
+                return `<tr style="background:${vencida?'rgba(239,68,68,.06)':'rgba(245,158,11,.04)'}">
+              <td>
+                <strong>${p.cliente||'—'}</strong>
+                <br><span style="font-size:10px;${vencida?'color:var(--red);font-weight:700':'color:var(--gray-400)'}">📝 Parcela ${p.numero}/${p.total_parcelas}${vencida?' — VENCIDA':''}</span>
+              </td>
+              <td style="font-size:12px">${p.vencimento?p.vencimento.split('-').reverse().join('/'):'—'}</td>
+              <td><strong style="color:var(--yellow)">R$ ${f(p.valor)}</strong></td>
+              <td>
+                <button class="btn btn-sm btn-success" onclick="pagarParcela('${p.id}','${p.venda_id}')" title="Marcar parcela como pago">✅ Pagar</button>
+              </td>
+            </tr>`;
+              }).join('')}
+            </tbody>
           </table>
           <div style="padding:10px 16px;background:rgba(245,158,11,.06);border-top:1px solid rgba(245,158,11,.2);font-size:12px;display:flex;justify-content:space-between">
             <span style="color:var(--gray-600)">Total em aberto</span>
-            <strong style="color:var(--yellow)">R$ ${f(vendasPendentes.reduce((a,v)=>a+Number(v.total),0))}</strong>
+            <strong style="color:var(--yellow)">R$ ${f(vendasPendentes.reduce((a,v)=>a+Number(v.total),0) + parcelasPendentes.reduce((a,p)=>a+Number(p.valor),0))}</strong>
           </div>`
         }
       </div>
@@ -1498,7 +1519,27 @@ async function renderVendas(c) {
       <div class="form-group"><label>Status</label>
         <select id="v-status"><option value="pago">✅ Pago</option><option value="pendente">⏳ Pendente</option></select>
       </div>
+      <div class="form-group">
+        <label>Forma de Pagamento</label>
+        <select id="v-forma-pgto" onchange="onFormaPagamentoChange()">
+          <option value="Dinheiro">💵 Dinheiro</option>
+          <option value="PIX">📱 PIX</option>
+          <option value="Cartão">💳 Cartão</option>
+          <option value="Promissória">📝 Promissória</option>
+        </select>
+      </div>
+      <div class="form-group" id="campo-taxa-maquineta" style="display:none">
+        <label>Taxa da Maquineta (%)</label>
+        <input type="number" id="v-taxa-maquineta" value="0" min="0" max="100" step="0.01" placeholder="Ex: 2.5">
+      </div>
+      <div class="form-group" id="campo-parcelas" style="display:none">
+        <label>Número de Parcelas</label>
+        <select id="v-num-parcelas">
+          ${Array.from({length:11},(_,i)=>i+2).map(n=>`<option value="${n}">${n}x</option>`).join('')}
+        </select>
+      </div>
     </div>
+    <div id="parcelas-preview" style="display:none;margin-top:10px;background:var(--gray-50);border-radius:8px;padding:12px"></div>
     <div style="margin-top:16px">
       <div class="form-group" style="position:relative">
         <label>Buscar Produto (código ou nome) — separe múltiplos com vírgula</label>
@@ -1661,7 +1702,10 @@ function renderVendasRows(vendas) {
       <td><strong>R$ ${f(v.total)}</strong></td>
       <td>${v.desconto>0?v.desconto+'%':'—'}</td>
       <td style="font-size:12px;color:var(--gray-600);max-width:150px">${v.observacao||'—'}</td>
-      <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
+      <td>
+      <span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
+      ${v.forma_pagamento?`<br><span style="font-size:10px;color:var(--gray-400)">${v.forma_pagamento==='PIX'?'📱':v.forma_pagamento==='Cartão'?'💳':v.forma_pagamento==='Promissória'?'📝':'💵'} ${v.forma_pagamento}${v.forma_pagamento==='Cartão'&&v.taxa_maquineta>0?' ('+v.taxa_maquineta+'%)':''}</span>`:''}
+    </td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" title="Gerar pedido em PDF" onclick="gerarPedidoPDF('${v.id}')">🧾</button>
         <button class="btn btn-sm btn-outline" onclick="openEditVenda('${v.id}','${v.cliente||''}','${v.telefone||''}','${v.codigos||''}','${v.data_venda||''}',${v.desconto||0},${v.total||0},'${v.status}','${(v.observacao||'')}')">✏️</button>
@@ -1855,6 +1899,49 @@ function removerProdutoSelecionado(codigo) {
   atualizarSelecionados();
 }
 
+function onFormaPagamentoChange() {
+  const forma = document.getElementById('v-forma-pgto')?.value;
+  const campoTaxa = document.getElementById('campo-taxa-maquineta');
+  const campoParc = document.getElementById('campo-parcelas');
+  const preview   = document.getElementById('parcelas-preview');
+
+  if (campoTaxa) campoTaxa.style.display = forma==='Cartão' ? 'block' : 'none';
+  if (campoParc) campoParc.style.display = forma==='Promissória' ? 'block' : 'none';
+
+  if (forma === 'Promissória') {
+    atualizarPreviewParcelas();
+  } else if (preview) {
+    preview.style.display = 'none';
+  }
+}
+
+function atualizarPreviewParcelas() {
+  const preview = document.getElementById('parcelas-preview');
+  const numParc = parseInt(document.getElementById('v-num-parcelas')?.value)||2;
+  const sel = window._produtosSelecionados||[];
+  const subtotal = sel.reduce(function(a,p){
+    const isBoni = p.bonificacao||p._isBoni||false;
+    return a + (isBoni ? 0 : Number(p.venda)*(p.qty||1));
+  },0);
+  const descPct = getDescontoPct(subtotal);
+  const total = subtotal * (1-descPct/100);
+  const valorParcela = total/numParc;
+  const dataBase = document.getElementById('v-data')?.value || new Date().toISOString().split('T')[0];
+
+  if (!preview) return;
+  let rows = '';
+  for (let i=1;i<=numParc;i++) {
+    const venc = new Date(dataBase);
+    venc.setMonth(venc.getMonth()+i);
+    rows += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">'
+      + '<span>Parcela ' + i + '/' + numParc + '</span>'
+      + '<span><strong>R$ ' + f(valorParcela) + '</strong> — vence ' + venc.toLocaleDateString('pt-BR') + '</span>'
+      + '</div>';
+  }
+  preview.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">📝 Prévia das Parcelas (Total: R$ ' + f(total) + ')</div>' + rows;
+  preview.style.display = 'block';
+}
+
 function setDescontoTipo(tipo) {
   window._descontoTipo = tipo;
   const btnPct = document.getElementById('v-desc-tipo-pct');
@@ -1937,6 +2024,7 @@ function atualizarSelecionados() {
       tot.innerHTML = '<span style="color:#1E293B;font-size:16px;font-weight:700">💰 Total: R$ ' + f(total) + '</span>';
     }
   }
+  if (document.getElementById('v-forma-pgto')?.value === 'Promissória') atualizarPreviewParcelas();
 }
 
 function fecharSugestoes() {
@@ -2221,10 +2309,41 @@ async function registrarVenda() {
     return a+(Number(p.venda)*(p.qty||1));
   },0) * (1-desc/100);
   const obs = document.getElementById('v-obs')?.value.trim()||'';
-  const { error } = await sb.from('vendas').insert({
-    user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status, data_venda:data, observacao:obs, itens_bonificacao:itensBoniStr
-  });
+  const formaPgto = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
+  const taxaMaquineta = formaPgto==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
+  const numParcelas = formaPgto==='Promissória' ? (parseInt(document.getElementById('v-num-parcelas')?.value)||2) : 0;
+
+  // Promissória: pagamento sempre fica pendente até as parcelas serem pagas
+  const statusFinal = formaPgto==='Promissória' ? 'pendente' : status;
+
+  const { data: vendaInserida, error } = await sb.from('vendas').insert({
+    user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status:statusFinal,
+    data_venda:data, observacao:obs, itens_bonificacao:itensBoniStr,
+    forma_pagamento:formaPgto, taxa_maquineta:taxaMaquineta
+  }).select().single();
   if (error) { showToast('Erro ao registrar venda','error'); return; }
+
+  // Gera parcelas se Promissória
+  if (formaPgto==='Promissória' && numParcelas>=2 && vendaInserida) {
+    const valorParcela = total/numParcelas;
+    const parcelasInsert = [];
+    for (let i=1;i<=numParcelas;i++) {
+      const venc = new Date(data);
+      venc.setMonth(venc.getMonth()+i);
+      parcelasInsert.push({
+        user_id: currentUser.id,
+        venda_id: vendaInserida.id,
+        cliente,
+        numero: i,
+        total_parcelas: numParcelas,
+        valor: valorParcela,
+        vencimento: venc.toISOString().split('T')[0],
+        status: 'pendente'
+      });
+    }
+    await sb.from('parcelas').insert(parcelasInsert);
+  }
+
   for (const p of sel) {
     const qty = p.qty||1;
     const isBoniItem = p.bonificacao||p._isBoni||false;
@@ -2240,7 +2359,7 @@ async function registrarVenda() {
     }
   }
   window._produtosSelecionados = [];
-  showToast('Venda registrada com sucesso!','success');
+  showToast(formaPgto==='Promissória' ? `Venda registrada! ${numParcelas}x de R$ ${f(total/numParcelas)}` : 'Venda registrada com sucesso!','success');
   navigate('vendas');
 }
 
@@ -4346,6 +4465,22 @@ document.getElementById('modal-overlay').addEventListener('click',function(e){if
 async function pagarVendaDash(id) {
   await sb.from('vendas').update({status:'pago'}).eq('id', id);
   showToast('✅ Venda marcada como paga!','success');
+  navigate('dashboard');
+}
+
+async function pagarParcela(parcelaId, vendaId) {
+  await sb.from('parcelas').update({status:'pago'}).eq('id', parcelaId);
+
+  // Verifica se todas as parcelas dessa venda já foram pagas
+  const { data: parcelas } = await sb.from('parcelas').select('status').eq('venda_id', vendaId);
+  const todasPagas = (parcelas||[]).every(p=>p.status==='pago');
+  if (todasPagas) {
+    await sb.from('vendas').update({status:'pago'}).eq('id', vendaId);
+    showToast('✅ Parcela paga! Todas as parcelas concluídas, venda marcada como Paga.','success');
+  } else {
+    const pagas = (parcelas||[]).filter(p=>p.status==='pago').length;
+    showToast(`✅ Parcela paga! (${pagas}/${parcelas.length} parcelas pagas)`,'success');
+  }
   navigate('dashboard');
 }
 
