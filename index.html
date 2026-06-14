@@ -2641,9 +2641,12 @@ async function renderClientes(c) {
   <div class="table-card">
     <div class="table-header">
       <h3>Clientes Cadastrados (${(clientes||[]).length})</h3>
-      <input type="text" id="busca-cliente-cad" placeholder="🔍 Buscar por nome ou telefone..."
-        style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:260px;"
-        oninput="filtrarClientesCad(this.value)">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-sm btn-outline" onclick="importarClientesDeVendas()">🔄 Importar do Histórico de Vendas</button>
+        <input type="text" id="busca-cliente-cad" placeholder="🔍 Buscar por nome ou telefone..."
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:240px;"
+          oninput="filtrarClientesCad(this.value)">
+      </div>
     </div>
     <table>
       <thead><tr><th>Nome</th><th>Telefone</th><th>E-mail</th><th>Total Gasto</th><th>Compras</th><th>Ações</th></tr></thead>
@@ -2671,6 +2674,34 @@ function renderClientesCadRows(clientes, vendas) {
       </td>
     </tr>`;
   }).join('');
+}
+
+async function importarClientesDeVendas() {
+  const { data: vendas } = await sb.from('vendas').select('cliente,telefone,data_venda').eq('user_id', currentUser.id).order('data_venda',{ascending:false});
+  const { data: clientesAtuais } = await sb.from('clientes').select('nome').eq('user_id', currentUser.id);
+
+  const existentes = new Set((clientesAtuais||[]).map(c=>(c.nome||'').trim().toLowerCase()));
+
+  // Agrupa por nome (case-insensitive), pegando o telefone mais recente não vazio
+  const novosMap = {};
+  (vendas||[]).forEach(v => {
+    const nome = (v.cliente||'').trim();
+    if (!nome) return;
+    const key = nome.toLowerCase();
+    if (existentes.has(key)) return; // já cadastrado
+    if (!novosMap[key]) novosMap[key] = { nome, telefone: v.telefone||'' };
+    else if (!novosMap[key].telefone && v.telefone) novosMap[key].telefone = v.telefone;
+  });
+
+  const novos = Object.values(novosMap);
+  if (!novos.length) { showToast('Todos os clientes do histórico já estão cadastrados!','success'); return; }
+
+  const inserts = novos.map(n => ({ user_id: currentUser.id, nome: n.nome, telefone: n.telefone }));
+  const { error } = await sb.from('clientes').insert(inserts);
+  if (error) { showToast('Erro ao importar clientes','error'); return; }
+
+  showToast(`✅ ${novos.length} cliente(s) importado(s) do histórico de vendas!`,'success');
+  navigate('clientes');
 }
 
 function filtrarClientesCad(termo) {
