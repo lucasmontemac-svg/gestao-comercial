@@ -331,6 +331,7 @@
 
   <!-- MOBILE MENU (mais opções) -->
   <div id="mobile-menu" style="display:none;position:fixed;bottom:60px;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,.1);z-index:99;padding:8px 0;">
+    <div onclick="navigate('clientes');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">👤 Clientes</div>
     <div onclick="navigate('precos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📈 Comparativo</div>
     <div onclick="navigate('precif');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💲 Precificação</div>
     <div onclick="navigate('despesas');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💸 Despesas</div>
@@ -527,6 +528,7 @@ function setupApp() {
     {id:'dashboard',icon:'📊',label:'Dashboard'},
     {id:'estoque',  icon:'📦',label:'Estoque'},
     {id:'vendas',   icon:'🧾',label:'Venda Detalhada'},
+    {id:'clientes', icon:'👤',label:'Clientes'},
     {id:'resumo',   icon:'💰',label:'Controle de Vendas'},
     {id:'precos',   icon:'📈',label:'Comparativo'},
     {id:'precif',   icon:'💲',label:'Precificação'},
@@ -562,7 +564,7 @@ function navItem(i) {
 // ══════════════════════════════════════════════════════
 const TITLES = {
   dashboard:'Dashboard', estoque:'📦 Controle de Estoque', vendas:'🧾 Venda Detalhada',
-  resumo:'💰 Controle de Vendas', precos:'📈 Comparativo de Preços', precif:'💲 Precificação',
+  clientes:'👤 Clientes', resumo:'💰 Controle de Vendas', precos:'📈 Comparativo de Preços', precif:'💲 Precificação',
   despesas:'💸 Despesas', 'admin-dash':'Painel Administrativo', 'admin-clients':'Clientes',
   'admin-acessos':'Controle de Acesso', 'admin-planos':'Planos e Cobranças'
 };
@@ -574,7 +576,7 @@ async function navigate(view) {
   const c = document.getElementById('main-content');
   c.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div></div>`;
   const renders = {
-    dashboard: renderDashboard, estoque: renderEstoque, vendas: renderVendas,
+    dashboard: renderDashboard, estoque: renderEstoque, vendas: renderVendas, clientes: renderClientes,
     resumo: renderResumo, precos: renderPrecos, precif: renderPrecif, despesas: renderDespesas,
     'admin-dash': renderAdminDash, 'admin-clients': renderAdminClients,
     'admin-acessos': renderAdminAcessos, 'admin-planos': renderAdminPlanos,
@@ -1485,15 +1487,25 @@ async function salvarProduto() {
 }
 
 async function renderVendas(c) {
-  const { data: produtos } = await sb.from('produtos').select('codigo,nome,venda,custo,bonificacao,categoria,estoque,estoque_bonificacao').eq('user_id',currentUser.id);
-  const { data: vendas }   = await sb.from('vendas').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  const [{ data: produtos }, { data: vendas }, { data: clientesCad }] = await Promise.all([
+    sb.from('produtos').select('codigo,nome,venda,custo,bonificacao,categoria,estoque,estoque_bonificacao').eq('user_id',currentUser.id),
+    sb.from('vendas').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false}),
+    sb.from('clientes').select('*').eq('user_id',currentUser.id),
+  ]);
   window._produtosVenda = produtos||[]; // garante que está atualizado
+  window._clientesCad = clientesCad||[];
   const prodsB64 = btoa(unescape(encodeURIComponent(JSON.stringify(produtos||[]))));
   c.innerHTML = `
   <div class="form-card">
     <div class="section-title">Registrar Nova Venda</div>
     <div class="form-grid">
-      <div class="form-group"><label>Nome do Cliente</label><input type="text" id="v-cliente" placeholder="Nome completo"></div>
+      <div class="form-group" style="position:relative">
+        <label>Nome do Cliente</label>
+        <input type="text" id="v-cliente" placeholder="Digite o nome (busca cadastrados)..." autocomplete="off"
+          oninput="buscarClienteVenda(this.value)"
+          onkeydown="if(event.key==='Escape')fecharSugestoesCliente()">
+        <div id="v-cliente-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:220px;overflow-y:auto;margin-top:2px"></div>
+      </div>
       <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="v-tel" placeholder="(81) 9 9999-9999"></div>
       <div class="form-group"><label>Meio de Contato</label>
         <select id="v-contato"><option>WhatsApp</option><option>Presencial</option><option>Instagram</option><option>Indicação</option></select>
@@ -1923,6 +1935,38 @@ function toggleBoniVenda(codigo, isBoni) {
 function removerProdutoSelecionado(codigo) {
   window._produtosSelecionados = window._produtosSelecionados.filter(p=>p.codigo!==codigo);
   atualizarSelecionados();
+}
+
+function buscarClienteVenda(termo) {
+  const sug = document.getElementById('v-cliente-sugestoes');
+  if (!sug) return;
+  if (!termo.trim()) { sug.style.display='none'; sug.innerHTML=''; return; }
+  const t = termo.toLowerCase();
+  const clientes = window._clientesCad||[];
+  const matches = clientes.filter(c => (c.nome||'').toLowerCase().includes(t) || (c.telefone||'').includes(termo)).slice(0,8);
+  if (!matches.length) { sug.style.display='none'; sug.innerHTML=''; return; }
+  sug.innerHTML = matches.map(c=>{
+    const nomeEsc = (c.nome||'').replace(/'/g,"\\'");
+    const telEsc  = (c.telefone||'').replace(/'/g,"\\'");
+    return `<div onclick="selecionarClienteVenda('${nomeEsc}','${telEsc}')"
+      style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100)"
+      onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
+      <strong>${c.nome}</strong>${c.telefone?` <span style="color:var(--gray-400);font-size:11px">${c.telefone}</span>`:''}
+    </div>`;
+  }).join('');
+  sug.style.display='block';
+}
+
+function selecionarClienteVenda(nome, telefone) {
+  document.getElementById('v-cliente').value = nome;
+  const telInput = document.getElementById('v-tel');
+  if (telInput && telefone) telInput.value = telefone;
+  fecharSugestoesCliente();
+}
+
+function fecharSugestoesCliente() {
+  const sug = document.getElementById('v-cliente-sugestoes');
+  if (sug) { sug.style.display='none'; sug.innerHTML=''; }
 }
 
 function atualizarMargemPreview() {
@@ -2557,9 +2601,154 @@ async function registrarVenda() {
       }
     }
   }
+  // Auto-cadastra o cliente no módulo Clientes, se ainda não existir
+  const clientesCad = window._clientesCad||[];
+  const jaExiste = clientesCad.some(cl => (cl.nome||'').trim().toLowerCase() === cliente.toLowerCase());
+  if (!jaExiste) {
+    const { data: novoCliente } = await sb.from('clientes').insert({
+      user_id: currentUser.id, nome: cliente, telefone: tel
+    }).select().single();
+    if (novoCliente) window._clientesCad.push(novoCliente);
+  }
+
   window._produtosSelecionados = [];
   showToast(formaPgto==='Promissória' ? `Venda registrada! ${numParcelas}x de R$ ${f(total/numParcelas)}` : 'Venda registrada com sucesso!','success');
   navigate('vendas');
+}
+
+async function renderClientes(c) {
+  const [{ data: clientes }, { data: vendas }] = await Promise.all([
+    sb.from('clientes').select('*').eq('user_id', currentUser.id).order('nome'),
+    sb.from('vendas').select('cliente,total,status,data_venda').eq('user_id', currentUser.id),
+  ]);
+
+  window._clientesAll = clientes||[];
+  window._clientesVendas = vendas||[];
+
+  c.innerHTML = `
+  <div class="form-card">
+    <div class="section-title">+ Cadastrar Cliente</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Nome Completo</label><input type="text" id="cl-nome" placeholder="Nome do cliente"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="cl-tel" placeholder="(00) 00000-0000"></div>
+      <div class="form-group"><label>E-mail</label><input type="email" id="cl-email" placeholder="email@exemplo.com"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Endereço</label><input type="text" id="cl-endereco" placeholder="Rua, número, bairro, cidade"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Observação</label><input type="text" id="cl-obs" placeholder="Ex: cliente revendedor, prefere PIX..."></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarCliente()">+ Adicionar Cliente</button></div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <h3>Clientes Cadastrados (${(clientes||[]).length})</h3>
+      <input type="text" id="busca-cliente-cad" placeholder="🔍 Buscar por nome ou telefone..."
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:260px;"
+        oninput="filtrarClientesCad(this.value)">
+    </div>
+    <table>
+      <thead><tr><th>Nome</th><th>Telefone</th><th>E-mail</th><th>Total Gasto</th><th>Compras</th><th>Ações</th></tr></thead>
+      <tbody id="tbody-clientes-cad">${renderClientesCadRows(clientes||[], vendas||[])}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderClientesCadRows(clientes, vendas) {
+  if (!clientes.length) return '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum cliente cadastrado ainda</td></tr>';
+  return clientes.map(cl => {
+    const compras = vendas.filter(v=>(v.cliente||'').toLowerCase()===(cl.nome||'').toLowerCase());
+    const totalGasto = compras.reduce((a,v)=>a+Number(v.total),0);
+    const clJson = JSON.stringify(cl).replace(/"/g,'&quot;');
+    return `<tr data-nome="${(cl.nome||'').toLowerCase()}" data-tel="${(cl.telefone||'').toLowerCase()}">
+      <td><strong>${cl.nome}</strong>${cl.observacao?`<br><span style="font-size:11px;color:var(--gray-400)">${cl.observacao}</span>`:''}</td>
+      <td style="font-size:13px">${cl.telefone||'—'}</td>
+      <td style="font-size:12px;color:var(--gray-600)">${cl.email||'—'}</td>
+      <td style="font-weight:700;color:var(--green-dim)">R$ ${f(totalGasto)}</td>
+      <td style="text-align:center">${compras.length}</td>
+      <td style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-outline" onclick="abrirComprasCliente('${(cl.nome||'').replace(/'/g,"\\'")}')">👁 Compras</button>
+        <button class="btn btn-sm btn-outline" onclick="openEditCliente(${clJson})">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="excluirCliente('${cl.id}','${(cl.nome||'').replace(/'/g,"\\'")}')">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarClientesCad(termo) {
+  const rows = document.querySelectorAll('#tbody-clientes-cad tr[data-nome]');
+  const t = termo.toLowerCase();
+  rows.forEach(r => {
+    const match = (r.dataset.nome||'').includes(t) || (r.dataset.tel||'').includes(t);
+    r.style.display = match ? '' : 'none';
+  });
+}
+
+async function salvarCliente() {
+  const nome = document.getElementById('cl-nome').value.trim();
+  if (!nome) { showToast('Informe o nome do cliente','error'); return; }
+  const dados = {
+    user_id: currentUser.id,
+    nome,
+    telefone: document.getElementById('cl-tel').value.trim(),
+    email: document.getElementById('cl-email').value.trim(),
+    endereco: document.getElementById('cl-endereco').value.trim(),
+    observacao: document.getElementById('cl-obs').value.trim(),
+  };
+  const { error } = await sb.from('clientes').insert(dados);
+  if (error) { showToast('Erro ao salvar cliente','error'); return; }
+  showToast('Cliente cadastrado com sucesso!','success');
+  navigate('clientes');
+}
+
+function openEditCliente(cl) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>✏️ Editar Cliente</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Nome Completo</label><input type="text" id="ecl-nome" value="${(cl.nome||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="ecl-tel" value="${cl.telefone||''}"></div>
+      <div class="form-group"><label>E-mail</label><input type="email" id="ecl-email" value="${cl.email||''}"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Endereço</label><input type="text" id="ecl-endereco" value="${(cl.endereco||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Observação</label><input type="text" id="ecl-obs" value="${(cl.observacao||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" id="ecl-save-btn">💾 Salvar</button>
+    </div>`;
+  document.getElementById('ecl-save-btn').addEventListener('click', function(){ salvarEdicaoCliente2(cl.id); });
+  openModal();
+}
+
+async function salvarEdicaoCliente2(id) {
+  const dados = {
+    nome: document.getElementById('ecl-nome').value.trim(),
+    telefone: document.getElementById('ecl-tel').value.trim(),
+    email: document.getElementById('ecl-email').value.trim(),
+    endereco: document.getElementById('ecl-endereco').value.trim(),
+    observacao: document.getElementById('ecl-obs').value.trim(),
+  };
+  if (!dados.nome) { showToast('Informe o nome','error'); return; }
+  const { error } = await sb.from('clientes').update(dados).eq('id', id);
+  if (error) { showToast('Erro ao salvar','error'); return; }
+  closeModal();
+  showToast('Cliente atualizado!','success');
+  navigate('clientes');
+}
+
+function excluirCliente(id, nome) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>🗑 Excluir Cliente</h3>
+    <p style="font-size:14px;color:var(--gray-600);margin-bottom:8px">Deseja excluir <strong>${nome}</strong> do cadastro?</p>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:20px">As vendas já registradas para este cliente NÃO serão apagadas.</p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" id="del-cli-btn">🗑 Excluir</button>
+    </div>`;
+  document.getElementById('del-cli-btn').addEventListener('click', async function(){
+    await sb.from('clientes').delete().eq('id', id);
+    closeModal();
+    showToast('Cliente excluído!','success');
+    navigate('clientes');
+  });
+  openModal();
 }
 
 async function renderResumo(c) {
@@ -2892,12 +3081,22 @@ function filtrarClientes(termo) {
   rows.forEach(r => { r.style.display = (r.dataset.nome||'').includes(t) ? '' : 'none'; });
 }
 
-function abrirComprasCliente(nomeCliente) {
-  const vendas = window._resumoVendas||[];
-  const prods  = window._resumoProdutos||[];
+async function abrirComprasCliente(nomeCliente) {
+  let vendas = window._resumoVendas||[];
+  let prods  = window._resumoProdutos||[];
+
+  // Fallback: se os dados do Controle de Vendas não estiverem carregados (ex: vindo do módulo Clientes), busca direto
+  if (!vendas.length || !prods.length) {
+    const [{ data: v }, { data: p }] = await Promise.all([
+      sb.from('vendas').select('*').eq('user_id', currentUser.id),
+      sb.from('produtos').select('*').eq('user_id', currentUser.id),
+    ]);
+    vendas = v||[]; prods = p||[];
+    window._resumoVendas = vendas; window._resumoProdutos = prods;
+  }
 
   const compras = vendas.filter(v=>v.cliente===nomeCliente).sort((a,b)=>(b.data_venda||'').localeCompare(a.data_venda||''));
-  if (!compras.length) { showToast('Nenhuma compra encontrada','error'); return; }
+  if (!compras.length) { showToast('Nenhuma compra registrada para este cliente ainda','error'); return; }
 
   // Agrega produtos comprados
   const prodMap = {};
