@@ -2639,34 +2639,55 @@ async function renderClientes(c) {
   </div>
 
   <div class="table-card">
-    <div class="table-header">
+    <div class="table-header" style="flex-wrap:wrap;gap:10px">
       <h3>Clientes Cadastrados (${(clientes||[]).length})</h3>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="importarClientesDeVendas()">🔄 Importar do Histórico de Vendas</button>
         <input type="text" id="busca-cliente-cad" placeholder="🔍 Buscar por nome ou telefone..."
-          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:240px;"
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:220px;"
           oninput="filtrarClientesCad(this.value)">
       </div>
     </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 0 14px 0">
+      <label style="font-size:12px;color:var(--gray-400);font-weight:600">📅 Última Compra:</label>
+      <select id="filtro-ultima-compra" onchange="aplicarFiltroUltimaCompra()"
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
+        <option value="">Todos os clientes</option>
+        <option value="semana">Compraram esta semana</option>
+        <option value="15">Sem comprar há 15+ dias</option>
+        <option value="30">Sem comprar há 30+ dias</option>
+        <option value="45">Sem comprar há 45+ dias</option>
+        <option value="60">Sem comprar há 60+ dias</option>
+        <option value="custom">Período específico</option>
+      </select>
+      <div id="ultima-compra-custom" style="display:none;gap:8px;align-items:center">
+        <input type="date" id="uc-de" style="border:1px solid var(--gray-200);border-radius:8px;padding:6px 10px;font-size:13px;outline:none" onchange="aplicarFiltroUltimaCompra()">
+        <span style="font-size:12px;color:var(--gray-400)">até</span>
+        <input type="date" id="uc-ate" style="border:1px solid var(--gray-200);border-radius:8px;padding:6px 10px;font-size:13px;outline:none" onchange="aplicarFiltroUltimaCompra()">
+      </div>
+    </div>
     <table>
-      <thead><tr><th>Nome</th><th>Telefone</th><th>E-mail</th><th>Total Gasto</th><th>Compras</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Nome</th><th>Telefone</th><th>E-mail</th><th>Total Gasto</th><th>Compras</th><th>Última Compra</th><th>Ações</th></tr></thead>
       <tbody id="tbody-clientes-cad">${renderClientesCadRows(clientes||[], vendas||[])}</tbody>
     </table>
   </div>`;
 }
 
 function renderClientesCadRows(clientes, vendas) {
-  if (!clientes.length) return '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum cliente cadastrado ainda</td></tr>';
+  if (!clientes.length) return '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum cliente cadastrado ainda</td></tr>';
   return clientes.map(cl => {
     const compras = vendas.filter(v=>(v.cliente||'').toLowerCase()===(cl.nome||'').toLowerCase());
     const totalGasto = compras.reduce((a,v)=>a+Number(v.total),0);
+    let ultimaCompra = '';
+    compras.forEach(v=>{ if(v.data_venda && (!ultimaCompra || v.data_venda>ultimaCompra)) ultimaCompra=v.data_venda; });
     const clJson = JSON.stringify(cl).replace(/"/g,'&quot;');
-    return `<tr data-nome="${(cl.nome||'').toLowerCase()}" data-tel="${(cl.telefone||'').toLowerCase()}">
+    return `<tr data-nome="${(cl.nome||'').toLowerCase()}" data-tel="${(cl.telefone||'').toLowerCase()}" data-ultima-compra="${ultimaCompra}">
       <td><strong>${cl.nome}</strong>${cl.observacao?`<br><span style="font-size:11px;color:var(--gray-400)">${cl.observacao}</span>`:''}</td>
       <td style="font-size:13px">${cl.telefone||'—'}</td>
       <td style="font-size:12px;color:var(--gray-600)">${cl.email||'—'}</td>
       <td style="font-weight:700;color:var(--green-dim)">R$ ${f(totalGasto)}</td>
       <td style="text-align:center">${compras.length}</td>
+      <td style="font-size:12px;color:var(--gray-400);text-align:center">${ultimaCompra?ultimaCompra.split('-').reverse().join('/'):'—'}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" onclick="abrirComprasCliente('${(cl.nome||'').replace(/'/g,"\\'")}')">👁 Compras</button>
         <button class="btn btn-sm btn-outline" onclick="openEditCliente(${clJson})">✏️</button>
@@ -2675,6 +2696,7 @@ function renderClientesCadRows(clientes, vendas) {
     </tr>`;
   }).join('');
 }
+
 
 async function importarClientesDeVendas() {
   const { data: vendas } = await sb.from('vendas').select('cliente,telefone,data_venda').eq('user_id', currentUser.id).order('data_venda',{ascending:false});
@@ -2704,12 +2726,51 @@ async function importarClientesDeVendas() {
   navigate('clientes');
 }
 
-function filtrarClientesCad(termo) {
+function filtrarClientesCad() {
+  aplicarFiltrosClientesCad();
+}
+
+function aplicarFiltroUltimaCompra() {
+  const customDiv = document.getElementById('ultima-compra-custom');
+  const filtro = document.getElementById('filtro-ultima-compra')?.value||'';
+  if (customDiv) customDiv.style.display = filtro==='custom' ? 'flex' : 'none';
+  aplicarFiltrosClientesCad();
+}
+
+function aplicarFiltrosClientesCad() {
+  const termo  = (document.getElementById('busca-cliente-cad')?.value||'').toLowerCase();
+  const filtro = document.getElementById('filtro-ultima-compra')?.value||'';
+  const hoje = new Date();
+  const hojeStr = hoje.toISOString().split('T')[0];
   const rows = document.querySelectorAll('#tbody-clientes-cad tr[data-nome]');
-  const t = termo.toLowerCase();
+
   rows.forEach(r => {
-    const match = (r.dataset.nome||'').includes(t) || (r.dataset.tel||'').includes(t);
-    r.style.display = match ? '' : 'none';
+    // Filtro de busca por nome/telefone
+    const matchBusca = !termo || (r.dataset.nome||'').includes(termo) || (r.dataset.tel||'').includes(termo);
+
+    // Filtro de última compra
+    const uc = r.dataset.ultimaCompra||'';
+    let matchUC = true;
+    if (filtro === 'semana') {
+      if (!uc) { matchUC = false; }
+      else {
+        const dias = Math.floor((hoje - new Date(uc)) / 864e5);
+        matchUC = dias >= 0 && dias <= 7;
+      }
+    } else if (['15','30','45','60'].includes(filtro)) {
+      const limite = parseInt(filtro);
+      if (!uc) { matchUC = true; }
+      else {
+        const dias = Math.floor((hoje - new Date(uc)) / 864e5);
+        matchUC = dias >= limite;
+      }
+    } else if (filtro === 'custom') {
+      const de  = document.getElementById('uc-de')?.value || '0000-01-01';
+      const ate = document.getElementById('uc-ate')?.value || hojeStr;
+      matchUC = !!uc && uc >= de && uc <= ate;
+    }
+
+    r.style.display = (matchBusca && matchUC) ? '' : 'none';
   });
 }
 
