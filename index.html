@@ -784,7 +784,7 @@ async function renderDashboard(c) {
             <td><strong>${v.cliente||'—'}</strong></td>
             <td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.codigos||'—'}</td>
             <td style="font-size:12px">${v.data_venda||'—'}</td>
-            <td><strong>R$ ${f(v.total)}</strong></td>
+            <td><strong>R$ ${f(v.total)}</strong>${v.valor_bruto&&Number(v.valor_bruto)!==Number(v.total)?`<br><span style="font-size:10px;color:var(--gray-400)">Bruto: R$ ${f(v.valor_bruto)}</span>`:''}</td>
             <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅':'⏳'}</span></td>
           </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda</td></tr>'}</tbody>
         </table>
@@ -1706,13 +1706,13 @@ function renderVendasRows(vendas) {
       <td><strong>${v.cliente||'—'}</strong><br><small style="color:var(--gray-400)">${v.telefone||''}</small></td>
       <td style="font-size:12px;max-width:200px">${nomesStr||v.codigos||'—'}</td>
       <td>${v.data_venda||'—'}</td>
-      <td><strong>R$ ${f(v.total)}</strong></td>
+      <td><strong>R$ ${f(v.total)}</strong>${v.valor_bruto&&Number(v.valor_bruto)!==Number(v.total)?`<br><span style="font-size:10px;color:var(--gray-400)">Bruto: R$ ${f(v.valor_bruto)}</span>`:''}</td>
       <td>${v.desconto>0?v.desconto+'%':'—'}</td>
       <td style="font-size:12px;color:var(--gray-600);max-width:150px">${v.observacao||'—'}</td>
       <td>
       <span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
       ${v.forma_pagamento?`<br><span style="font-size:10px;color:var(--gray-400)">${v.forma_pagamento==='PIX'?'📱':v.forma_pagamento==='Cartão'?'💳':v.forma_pagamento==='Promissória'?'📝':'💵'} ${v.forma_pagamento}${v.forma_pagamento==='Cartão'&&v.parcelas_cartao>1?' '+v.parcelas_cartao+'x':''}${v.forma_pagamento==='Cartão'&&v.taxa_maquineta>0?' ('+v.taxa_maquineta+'%)':''}</span>`:''}
-      ${v.forma_pagamento==='Cartão'&&v.valor_liquido&&Number(v.valor_liquido)!==Number(v.total)?`<br><span style="font-size:10px;color:var(--green-dim)">Líquido: R$ ${f(v.valor_liquido)}</span>`:''}
+
     </td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" title="Gerar pedido em PDF" onclick="gerarPedidoPDF('${v.id}')">🧾</button>
@@ -1744,7 +1744,9 @@ function gerarPedidoPDF(id) {
     return { nome, qty, valorUnit, subtotal: valorUnit*qty, isBoni };
   });
 
-  const totalPedido = Number(venda.total)||0;
+  // No pedido (documento do cliente), sempre mostramos o valor BRUTO cobrado do cliente,
+  // independente da taxa da maquineta (que é um custo interno do vendedor)
+  const totalPedido = Number(venda.valor_bruto ?? venda.total)||0;
   const descPct = Number(venda.desconto)||0;
   const subtotalBruto = (descPct > 0 && descPct < 100) ? totalPedido / (1-descPct/100) : totalPedido;
   const valorDesconto = subtotalBruto - totalPedido;
@@ -1966,21 +1968,43 @@ function atualizarTaxaCartao() {
   const hidden   = document.getElementById('v-taxa-maquineta');
   if (hidden) hidden.value = taxaPct;
 
-  // Calcula valor líquido com base no total atual da venda
+  // Calcula valor bruto (cobrado do cliente) e líquido (após taxa da maquineta)
   const sel = window._produtosSelecionados||[];
   const subtotal = sel.reduce(function(a,p){
     const isBoni = p.bonificacao||p._isBoni||false;
     return a + (isBoni ? 0 : Number(p.venda)*(p.qty||1));
   },0);
   const descPct = getDescontoPct(subtotal);
-  const total = subtotal * (1-descPct/100);
-  const valorLiquido = total * (1 - taxaPct/100);
+  const valorBruto = subtotal * (1-descPct/100);
+  const valorLiquido = valorBruto * (1 - taxaPct/100);
+
+  // Custo dos produtos (exclui bonificação)
+  const custoSel = sel.reduce(function(a,p){
+    const isBoni = p.bonificacao||p._isBoni||false;
+    return a + (isBoni ? 0 : Number(p.custo)*(p.qty||1));
+  },0);
+  const margemLiq = valorLiquido>0 ? ((valorLiquido-custoSel)/valorLiquido*100) : 0;
 
   const info = document.getElementById('taxa-cartao-info');
   if (info) {
-    info.innerHTML = taxaPct>0
-      ? `Taxa: <strong>${taxaPct}%</strong> &nbsp;→&nbsp; Valor líquido a receber: <strong style="color:var(--green-dim)">R$ ${f(valorLiquido)}</strong> <span style="color:var(--red)">(- R$ ${f(total-valorLiquido)})</span>`
-      : `Taxa: <strong>0%</strong> — configure as taxas para ver o cálculo`;
+    if (valorBruto<=0) {
+      info.innerHTML = `Selecione produtos para ver o cálculo`;
+    } else if (taxaPct>0) {
+      info.innerHTML = `
+        <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:4px">
+          <span>Valor Bruto: <strong>R$ ${f(valorBruto)}</strong></span>
+          <span>Taxa: <strong style="color:var(--red)">${taxaPct}% (- R$ ${f(valorBruto-valorLiquido)})</strong></span>
+          <span>Valor Líquido: <strong style="color:var(--green-dim)">R$ ${f(valorLiquido)}</strong></span>
+          <span>Margem Líquida: <strong style="color:${margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)'}">${margemLiq.toFixed(1)}%</strong></span>
+        </div>`;
+    } else {
+      info.innerHTML = `
+        <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:4px">
+          <span>Valor Líquido: <strong style="color:var(--green-dim)">R$ ${f(valorLiquido)}</strong></span>
+          <span>Margem Líquida: <strong style="color:${margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)'}">${margemLiq.toFixed(1)}%</strong></span>
+          <span style="color:var(--gray-400);font-size:11px">(configure a taxa em ⚙️ para ver o desconto)</span>
+        </div>`;
+    }
   }
 }
 
@@ -2403,8 +2427,13 @@ async function registrarVenda() {
   const formaPgto = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
   const taxaMaquineta = formaPgto==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
   const parcelasCartao = formaPgto==='Cartão' ? (parseInt(document.getElementById('v-parcelas-cartao')?.value)||1) : 1;
-  const valorLiquido = formaPgto==='Cartão' ? total*(1-taxaMaquineta/100) : total;
   const numParcelas = formaPgto==='Promissória' ? (parseInt(document.getElementById('v-num-parcelas')?.value)||2) : 0;
+
+  // valorBruto = valor cobrado do cliente (já com desconto aplicado)
+  const valorBruto = total;
+  // Para Cartão, a RECEITA registrada (total) é o valor LÍQUIDO já descontando a taxa da maquineta
+  const valorLiquido = formaPgto==='Cartão' ? valorBruto*(1-taxaMaquineta/100) : valorBruto;
+  total = valorLiquido; // total passa a representar a receita real
 
   // Promissória: pagamento sempre fica pendente até as parcelas serem pagas
   const statusFinal = formaPgto==='Promissória' ? 'pendente' : status;
@@ -2412,7 +2441,8 @@ async function registrarVenda() {
   const { data: vendaInserida, error } = await sb.from('vendas').insert({
     user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status:statusFinal,
     data_venda:data, observacao:obs, itens_bonificacao:itensBoniStr,
-    forma_pagamento:formaPgto, taxa_maquineta:taxaMaquineta, parcelas_cartao:parcelasCartao, valor_liquido:valorLiquido
+    forma_pagamento:formaPgto, taxa_maquineta:taxaMaquineta, parcelas_cartao:parcelasCartao,
+    valor_liquido:valorLiquido, valor_bruto:valorBruto
   }).select().single();
   if (error) { showToast('Erro ao registrar venda','error'); return; }
 
@@ -4608,4 +4638,3 @@ init();
 </script>
 </body>
 </html>
-      
