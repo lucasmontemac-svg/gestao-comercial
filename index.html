@@ -1485,7 +1485,7 @@ async function salvarProduto() {
 }
 
 async function renderVendas(c) {
-  const { data: produtos } = await sb.from('produtos').select('codigo,nome,venda').eq('user_id',currentUser.id);
+  const { data: produtos } = await sb.from('produtos').select('codigo,nome,venda,custo,bonificacao,categoria,estoque,estoque_bonificacao').eq('user_id',currentUser.id);
   const { data: vendas }   = await sb.from('vendas').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false});
   window._produtosVenda = produtos||[]; // garante que está atualizado
   const prodsB64 = btoa(unescape(encodeURIComponent(JSON.stringify(produtos||[]))));
@@ -1560,6 +1560,7 @@ async function renderVendas(c) {
       <div id="v-selecionados" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;min-height:10px"></div>
       <div id="v-preview" style="margin-top:6px;font-size:12px;color:var(--blue);min-height:16px"></div>
       <div id="v-total" style="margin-top:4px;font-size:14px;font-weight:700;color:var(--navy);min-height:20px"></div>
+      <div id="v-margem-info" style="min-height:18px"></div>
     </div>
     <div style="margin-top:12px">
       <div class="form-group">
@@ -1581,7 +1582,7 @@ async function renderVendas(c) {
           oninput="filtrarVendas(this.value)">
       </div>
     </div>
-    <table><thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Desc.</th><th>Observação</th><th>Status</th><th>Ações</th></tr></thead>
+    <table><thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Desc.</th><th>Margem Líq.</th><th>Observação</th><th>Status</th><th>Ações</th></tr></thead>
     <tbody id="tbody-vendas">${renderVendasRows(vendas||[])}</tbody>
     </table>
   </div>`;
@@ -1688,7 +1689,7 @@ function selecionarProdutoHistorico(codigo, nome) {
 }
 
 function renderVendasRows(vendas) {
-  if (!vendas.length) return '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>';
+  if (!vendas.length) return '<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>';
   const prods = window._produtosVenda||[];
   return vendas.map(v => {
     // Resolve códigos para nomes
@@ -1702,12 +1703,27 @@ function renderVendasRows(vendas) {
       return grouped[c]>1 ? grouped[c]+'x '+nome : nome;
     }).join(', ');
     const vStr = JSON.stringify(v).replace(/`/g,"'").replace(/\\/g,"\\");
+
+    // Margem líquida da venda: (total líquido - custo da mercadoria vendida) / total líquido
+    const boniSet = new Set((v.itens_bonificacao||'').split(',').map(function(s){return s.trim().toUpperCase();}).filter(Boolean));
+    let custoVenda = 0;
+    codes.forEach(function(c){
+      const cu = c.trim().toUpperCase();
+      if (boniSet.has(cu)) return; // itens de bonificação não entram no custo
+      const p = prods.find(function(x){return x.codigo.toUpperCase()===cu;});
+      if (p) custoVenda += Number(p.custo||0);
+    });
+    const totalLiq = Number(v.total)||0;
+    const margemLiqVenda = totalLiq>0 ? ((totalLiq-custoVenda)/totalLiq*100) : 0;
+    const corMgVenda = margemLiqVenda>=20?'green':margemLiqVenda>=0?'yellow':'red';
+
     return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-codigos="${(v.codigos||'').toLowerCase()}" data-obs="${(v.observacao||'').toLowerCase()}">
       <td><strong>${v.cliente||'—'}</strong><br><small style="color:var(--gray-400)">${v.telefone||''}</small></td>
       <td style="font-size:12px;max-width:200px">${nomesStr||v.codigos||'—'}</td>
       <td>${v.data_venda||'—'}</td>
       <td><strong>R$ ${f(v.total)}</strong>${v.valor_bruto&&Number(v.valor_bruto)!==Number(v.total)?`<br><span style="font-size:10px;color:var(--gray-400)">Bruto: R$ ${f(v.valor_bruto)}</span>`:''}</td>
       <td>${v.desconto>0?v.desconto+'%':'—'}</td>
+      <td><span class="badge badge-${corMgVenda}">${margemLiqVenda.toFixed(1)}%</span></td>
       <td style="font-size:12px;color:var(--gray-600);max-width:150px">${v.observacao||'—'}</td>
       <td>
       <span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
@@ -1909,6 +1925,43 @@ function removerProdutoSelecionado(codigo) {
   atualizarSelecionados();
 }
 
+function atualizarMargemPreview() {
+  const el = document.getElementById('v-margem-info');
+  if (!el) return;
+  const sel = window._produtosSelecionados||[];
+  if (!sel.length) { el.innerHTML=''; return; }
+
+  const subtotal = sel.reduce(function(a,p){
+    const isBoni = p.bonificacao||p._isBoni||false;
+    return a + (isBoni ? 0 : Number(p.venda)*(p.qty||1));
+  },0);
+  const descPct = getDescontoPct(subtotal);
+  const valorBruto = subtotal * (1-descPct/100);
+
+  const forma   = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
+  const taxaPct = forma==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
+  const valorLiquido = valorBruto * (1 - taxaPct/100);
+
+  const custoSel = sel.reduce(function(a,p){
+    const isBoni = p.bonificacao||p._isBoni||false;
+    return a + (isBoni ? 0 : Number(p.custo||0)*(p.qty||1));
+  },0);
+
+  const margemLiq = valorLiquido>0 ? ((valorLiquido-custoSel)/valorLiquido*100) : 0;
+  const corMg = margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)';
+
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--gray-200);font-size:12px;color:var(--gray-600)">';
+  html += '<span>Total Bruto: <strong>R$ ' + f(valorBruto) + '</strong></span>';
+  if (taxaPct>0) {
+    html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong> <span style="color:var(--red);font-size:11px">(-' + taxaPct + '% maquineta)</span></span>';
+  } else {
+    html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong></span>';
+  }
+  html += '<span>Margem Líquida: <strong style="color:' + corMg + '">' + margemLiq.toFixed(1) + '%</strong></span>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 // Taxas padrão da maquineta (1x a 10x) — usadas se o usuário ainda não configurou
 const TAXAS_MAQUINETA_PADRAO = {1:2.5,2:4.0,3:5.0,4:6.0,5:7.0,6:8.0,7:9.0,8:10.0,9:11.0,10:12.0};
 
@@ -2006,6 +2059,7 @@ function atualizarTaxaCartao() {
         </div>`;
     }
   }
+  atualizarMargemPreview();
 }
 
 function onFormaPagamentoChange() {
@@ -2026,6 +2080,7 @@ function onFormaPagamentoChange() {
   } else if (preview) {
     preview.style.display = 'none';
   }
+  atualizarMargemPreview();
 }
 
 function atualizarPreviewParcelas() {
@@ -2140,6 +2195,7 @@ function atualizarSelecionados() {
   const formaAtual = document.getElementById('v-forma-pgto')?.value;
   if (formaAtual === 'Promissória') atualizarPreviewParcelas();
   if (formaAtual === 'Cartão') atualizarTaxaCartao();
+  atualizarMargemPreview();
 }
 
 function fecharSugestoes() {
