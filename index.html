@@ -1541,8 +1541,8 @@ async function renderVendas(c) {
       </div>
       <div class="form-group" id="campo-parcelas" style="display:none">
         <label>Número de Parcelas</label>
-        <select id="v-num-parcelas">
-          ${Array.from({length:11},(_,i)=>i+2).map(n=>`<option value="${n}">${n}x</option>`).join('')}
+        <select id="v-num-parcelas" onchange="atualizarPreviewParcelas()">
+          ${Array.from({length:12},(_,i)=>i+1).map(n=>`<option value="${n}"${n===1?' selected':''}>${n}x</option>`).join('')}
         </select>
       </div>
     </div>
@@ -2085,7 +2085,7 @@ function onFormaPagamentoChange() {
 
 function atualizarPreviewParcelas() {
   const preview = document.getElementById('parcelas-preview');
-  const numParc = parseInt(document.getElementById('v-num-parcelas')?.value)||2;
+  const numParc = parseInt(document.getElementById('v-num-parcelas')?.value)||1;
   const sel = window._produtosSelecionados||[];
   const subtotal = sel.reduce(function(a,p){
     const isBoni = p.bonificacao||p._isBoni||false;
@@ -2094,19 +2094,28 @@ function atualizarPreviewParcelas() {
   const descPct = getDescontoPct(subtotal);
   const total = subtotal * (1-descPct/100);
   const valorParcela = total/numParc;
-  const dataBase = document.getElementById('v-data')?.value || new Date().toISOString().split('T')[0];
 
   if (!preview) return;
+
+  // Preserva vencimentos já preenchidos pelo usuário ao trocar o número de parcelas
+  const vencAnteriores = {};
+  for (let i=1;i<=12;i++) {
+    const el = document.getElementById('parcela-venc-'+i);
+    if (el && el.value) vencAnteriores[i] = el.value;
+  }
+
   let rows = '';
   for (let i=1;i<=numParc;i++) {
-    const venc = new Date(dataBase);
-    venc.setMonth(venc.getMonth()+i);
-    rows += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">'
-      + '<span>Parcela ' + i + '/' + numParc + '</span>'
-      + '<span><strong>R$ ' + f(valorParcela) + '</strong> — vence ' + venc.toLocaleDateString('pt-BR') + '</span>'
+    const vencSalvo = vencAnteriores[i]||'';
+    rows += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;padding:4px 0">'
+      + '<span>Parcela ' + i + '/' + numParc + ' — <strong>R$ ' + f(valorParcela) + '</strong></span>'
+      + '<div style="display:flex;align-items:center;gap:6px">'
+      + '<span style="color:var(--gray-400);font-size:11px">Vencimento:</span>'
+      + '<input type="date" id="parcela-venc-' + i + '" value="' + vencSalvo + '" style="border:1px solid var(--gray-200);border-radius:6px;padding:4px 8px;font-size:12px;outline:none">'
+      + '</div>'
       + '</div>';
   }
-  preview.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">📝 Prévia das Parcelas (Total: R$ ' + f(total) + ')</div>' + rows;
+  preview.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">📝 Parcelas (Total: R$ ' + f(total) + ') — preencha o vencimento de cada uma</div>' + rows;
   preview.style.display = 'block';
 }
 
@@ -2457,6 +2466,18 @@ async function registrarVenda() {
   if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
   if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
 
+  // ── VALIDAÇÃO PROMISSÓRIA — exige vencimento de cada parcela ──
+  if (document.getElementById('v-forma-pgto')?.value === 'Promissória') {
+    const numParc = parseInt(document.getElementById('v-num-parcelas')?.value)||1;
+    for (let i=1;i<=numParc;i++) {
+      const venc = document.getElementById('parcela-venc-'+i)?.value;
+      if (!venc) {
+        showToast(`❌ Informe o vencimento da Parcela ${i}/${numParc}`, 'error');
+        return;
+      }
+    }
+  }
+
   // ── VALIDAÇÃO DE ESTOQUE — bloqueia venda se não houver quantidade suficiente ──
   for (const p of sel) {
     const qty = p.qty||1;
@@ -2503,12 +2524,11 @@ async function registrarVenda() {
   if (error) { showToast('Erro ao registrar venda','error'); return; }
 
   // Gera parcelas se Promissória
-  if (formaPgto==='Promissória' && numParcelas>=2 && vendaInserida) {
+  if (formaPgto==='Promissória' && numParcelas>=1 && vendaInserida) {
     const valorParcela = total/numParcelas;
     const parcelasInsert = [];
     for (let i=1;i<=numParcelas;i++) {
-      const venc = new Date(data);
-      venc.setMonth(venc.getMonth()+i);
+      const vencInput = document.getElementById('parcela-venc-'+i)?.value || null;
       parcelasInsert.push({
         user_id: currentUser.id,
         venda_id: vendaInserida.id,
@@ -2516,7 +2536,7 @@ async function registrarVenda() {
         numero: i,
         total_parcelas: numParcelas,
         valor: valorParcela,
-        vencimento: venc.toISOString().split('T')[0],
+        vencimento: vencInput,
         status: 'pendente'
       });
     }
