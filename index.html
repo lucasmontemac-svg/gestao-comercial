@@ -1891,16 +1891,22 @@ function buscarProdutoVenda(termo) {
 
   if (!encontrados.length) { sug.style.display='none'; return; }
 
-  sug.innerHTML = encontrados.map(p => `
+  sug.innerHTML = encontrados.map(p => {
+    const estoque = Number(p.estoque)||0;
+    const estoqueBoni = Number(p.estoque_bonificacao)||0;
+    const corEstoque = estoque<=0 ? 'var(--red)' : estoque<=3 ? 'var(--yellow)' : 'var(--gray-400)';
+    return `
     <div onclick="selecionarProduto('${p.codigo}')" 
       style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;font-size:13px;transition:background .1s"
       onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">
       <div>
         <strong style="color:var(--blue)">${p.codigo}</strong>
         <span style="color:var(--gray-800);margin-left:8px">${p.nome}</span>
+        <span style="color:${corEstoque};font-size:11px;margin-left:8px">📦 ${estoque} un.${estoqueBoni>0?` <span style="color:var(--yellow)">🎁+${estoqueBoni}</span>`:''}</span>
       </div>
       <span style="color:var(--green-dim);font-weight:600">R$ ${f(p.venda)}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   sug.style.display = 'block';
 }
 
@@ -2649,22 +2655,14 @@ async function renderClientes(c) {
       </div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 0 14px 0">
-      <label style="font-size:12px;color:var(--gray-400);font-weight:600">📅 Última Compra:</label>
-      <select id="filtro-ultima-compra" onchange="aplicarFiltroUltimaCompra()"
+      <label style="font-size:12px;color:var(--gray-400);font-weight:600">↕️ Ordenar por:</label>
+      <select id="ordenar-clientes" onchange="renderClientesTable()"
         style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
-        <option value="">Todos os clientes</option>
-        <option value="semana">Compraram esta semana</option>
-        <option value="15">Sem comprar há 15+ dias</option>
-        <option value="30">Sem comprar há 30+ dias</option>
-        <option value="45">Sem comprar há 45+ dias</option>
-        <option value="60">Sem comprar há 60+ dias</option>
-        <option value="custom">Período específico</option>
+        <option value="nome-asc">Nome (A-Z)</option>
+        <option value="nome-desc">Nome (Z-A)</option>
+        <option value="ultima-desc">Última Compra (mais recente)</option>
+        <option value="ultima-asc">Última Compra (mais antiga)</option>
       </select>
-      <div id="ultima-compra-custom" style="display:none;gap:8px;align-items:center">
-        <input type="date" id="uc-de" style="border:1px solid var(--gray-200);border-radius:8px;padding:6px 10px;font-size:13px;outline:none" onchange="aplicarFiltroUltimaCompra()">
-        <span style="font-size:12px;color:var(--gray-400)">até</span>
-        <input type="date" id="uc-ate" style="border:1px solid var(--gray-200);border-radius:8px;padding:6px 10px;font-size:13px;outline:none" onchange="aplicarFiltroUltimaCompra()">
-      </div>
     </div>
     <table>
       <thead><tr><th>Nome</th><th>Telefone</th><th>E-mail</th><th>Total Gasto</th><th>Compras</th><th>Última Compra</th><th>Ações</th></tr></thead>
@@ -2675,19 +2673,60 @@ async function renderClientes(c) {
 
 function renderClientesCadRows(clientes, vendas) {
   if (!clientes.length) return '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum cliente cadastrado ainda</td></tr>';
-  return clientes.map(cl => {
+
+  const hoje = new Date();
+
+  // Enriquece cada cliente com dados de compras
+  let lista = clientes.map(cl => {
     const compras = vendas.filter(v=>(v.cliente||'').toLowerCase()===(cl.nome||'').toLowerCase());
     const totalGasto = compras.reduce((a,v)=>a+Number(v.total),0);
     let ultimaCompra = '';
     compras.forEach(v=>{ if(v.data_venda && (!ultimaCompra || v.data_venda>ultimaCompra)) ultimaCompra=v.data_venda; });
+    const dias = ultimaCompra ? Math.floor((hoje - new Date(ultimaCompra)) / 864e5) : null;
+    return { cl, compras, totalGasto, ultimaCompra, dias };
+  });
+
+  // Ordenação
+  const ordem = document.getElementById('ordenar-clientes')?.value || 'nome-asc';
+  if (ordem === 'nome-asc') {
+    lista.sort((a,b)=>(a.cl.nome||'').localeCompare(b.cl.nome||'','pt-BR'));
+  } else if (ordem === 'nome-desc') {
+    lista.sort((a,b)=>(b.cl.nome||'').localeCompare(a.cl.nome||'','pt-BR'));
+  } else if (ordem === 'ultima-desc') {
+    // Mais recente primeiro; quem nunca comprou vai para o final
+    lista.sort((a,b)=>{
+      if (a.dias===null && b.dias===null) return 0;
+      if (a.dias===null) return 1;
+      if (b.dias===null) return -1;
+      return a.dias - b.dias;
+    });
+  } else if (ordem === 'ultima-asc') {
+    // Mais antiga primeiro; quem nunca comprou vai para o final
+    lista.sort((a,b)=>{
+      if (a.dias===null && b.dias===null) return 0;
+      if (a.dias===null) return 1;
+      if (b.dias===null) return -1;
+      return b.dias - a.dias;
+    });
+  }
+
+  return lista.map(({cl, compras, totalGasto, ultimaCompra, dias}) => {
     const clJson = JSON.stringify(cl).replace(/"/g,'&quot;');
+    let ultimaLabel, ultimaCor;
+    if (dias===null) { ultimaLabel='Nunca comprou'; ultimaCor='var(--gray-400)'; }
+    else if (dias===0) { ultimaLabel='Hoje'; ultimaCor='var(--green-dim)'; }
+    else if (dias===1) { ultimaLabel='1 dia atrás'; ultimaCor='var(--green-dim)'; }
+    else if (dias<=7)  { ultimaLabel=dias+' dias atrás'; ultimaCor='var(--green-dim)'; }
+    else if (dias<=30) { ultimaLabel=dias+' dias atrás'; ultimaCor='var(--gray-600)'; }
+    else { ultimaLabel=dias+' dias atrás'; ultimaCor='var(--red)'; }
+
     return `<tr data-nome="${(cl.nome||'').toLowerCase()}" data-tel="${(cl.telefone||'').toLowerCase()}" data-ultima-compra="${ultimaCompra}">
       <td><strong>${cl.nome}</strong>${cl.observacao?`<br><span style="font-size:11px;color:var(--gray-400)">${cl.observacao}</span>`:''}</td>
       <td style="font-size:13px">${cl.telefone||'—'}</td>
       <td style="font-size:12px;color:var(--gray-600)">${cl.email||'—'}</td>
       <td style="font-weight:700;color:var(--green-dim)">R$ ${f(totalGasto)}</td>
       <td style="text-align:center">${compras.length}</td>
-      <td style="font-size:12px;color:var(--gray-400);text-align:center">${ultimaCompra?ultimaCompra.split('-').reverse().join('/'):'—'}</td>
+      <td style="font-size:12px;color:${ultimaCor};text-align:center;font-weight:600">${ultimaLabel}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" onclick="abrirComprasCliente('${(cl.nome||'').replace(/'/g,"\\'")}')">👁 Compras</button>
         <button class="btn btn-sm btn-outline" onclick="openEditCliente(${clJson})">✏️</button>
@@ -2695,6 +2734,13 @@ function renderClientesCadRows(clientes, vendas) {
       </td>
     </tr>`;
   }).join('');
+}
+
+function renderClientesTable() {
+  const tbody = document.getElementById('tbody-clientes-cad');
+  if (!tbody) return;
+  tbody.innerHTML = renderClientesCadRows(window._clientesAll||[], window._clientesVendas||[]);
+  filtrarClientesCad();
 }
 
 
@@ -2726,51 +2772,12 @@ async function importarClientesDeVendas() {
   navigate('clientes');
 }
 
-function filtrarClientesCad() {
-  aplicarFiltrosClientesCad();
-}
-
-function aplicarFiltroUltimaCompra() {
-  const customDiv = document.getElementById('ultima-compra-custom');
-  const filtro = document.getElementById('filtro-ultima-compra')?.value||'';
-  if (customDiv) customDiv.style.display = filtro==='custom' ? 'flex' : 'none';
-  aplicarFiltrosClientesCad();
-}
-
-function aplicarFiltrosClientesCad() {
-  const termo  = (document.getElementById('busca-cliente-cad')?.value||'').toLowerCase();
-  const filtro = document.getElementById('filtro-ultima-compra')?.value||'';
-  const hoje = new Date();
-  const hojeStr = hoje.toISOString().split('T')[0];
+function filtrarClientesCad(termo) {
+  const t = (termo!==undefined ? termo : (document.getElementById('busca-cliente-cad')?.value||'')).toLowerCase();
   const rows = document.querySelectorAll('#tbody-clientes-cad tr[data-nome]');
-
   rows.forEach(r => {
-    // Filtro de busca por nome/telefone
-    const matchBusca = !termo || (r.dataset.nome||'').includes(termo) || (r.dataset.tel||'').includes(termo);
-
-    // Filtro de última compra
-    const uc = r.dataset.ultimaCompra||'';
-    let matchUC = true;
-    if (filtro === 'semana') {
-      if (!uc) { matchUC = false; }
-      else {
-        const dias = Math.floor((hoje - new Date(uc)) / 864e5);
-        matchUC = dias >= 0 && dias <= 7;
-      }
-    } else if (['15','30','45','60'].includes(filtro)) {
-      const limite = parseInt(filtro);
-      if (!uc) { matchUC = true; }
-      else {
-        const dias = Math.floor((hoje - new Date(uc)) / 864e5);
-        matchUC = dias >= limite;
-      }
-    } else if (filtro === 'custom') {
-      const de  = document.getElementById('uc-de')?.value || '0000-01-01';
-      const ate = document.getElementById('uc-ate')?.value || hojeStr;
-      matchUC = !!uc && uc >= de && uc <= ate;
-    }
-
-    r.style.display = (matchBusca && matchUC) ? '' : 'none';
+    const match = !t || (r.dataset.nome||'').includes(t) || (r.dataset.tel||'').includes(t);
+    r.style.display = match ? '' : 'none';
   });
 }
 
