@@ -1529,8 +1529,15 @@ async function renderVendas(c) {
         </select>
       </div>
       <div class="form-group" id="campo-taxa-maquineta" style="display:none">
-        <label>Taxa da Maquineta (%)</label>
-        <input type="number" id="v-taxa-maquineta" value="0" min="0" max="100" step="0.01" placeholder="Ex: 2.5">
+        <label style="display:flex;align-items:center;justify-content:space-between">
+          <span>Parcelas no Cartão</span>
+          <span onclick="abrirConfigTaxas()" style="cursor:pointer;color:var(--blue);font-size:11px;font-weight:600">⚙️ Configurar taxas</span>
+        </label>
+        <select id="v-parcelas-cartao" onchange="atualizarTaxaCartao()">
+          ${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}">${n}x</option>`).join('')}
+        </select>
+        <input type="hidden" id="v-taxa-maquineta" value="0">
+        <div id="taxa-cartao-info" style="font-size:11px;color:var(--gray-400);margin-top:4px"></div>
       </div>
       <div class="form-group" id="campo-parcelas" style="display:none">
         <label>Número de Parcelas</label>
@@ -1704,7 +1711,8 @@ function renderVendasRows(vendas) {
       <td style="font-size:12px;color:var(--gray-600);max-width:150px">${v.observacao||'—'}</td>
       <td>
       <span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
-      ${v.forma_pagamento?`<br><span style="font-size:10px;color:var(--gray-400)">${v.forma_pagamento==='PIX'?'📱':v.forma_pagamento==='Cartão'?'💳':v.forma_pagamento==='Promissória'?'📝':'💵'} ${v.forma_pagamento}${v.forma_pagamento==='Cartão'&&v.taxa_maquineta>0?' ('+v.taxa_maquineta+'%)':''}</span>`:''}
+      ${v.forma_pagamento?`<br><span style="font-size:10px;color:var(--gray-400)">${v.forma_pagamento==='PIX'?'📱':v.forma_pagamento==='Cartão'?'💳':v.forma_pagamento==='Promissória'?'📝':'💵'} ${v.forma_pagamento}${v.forma_pagamento==='Cartão'&&v.parcelas_cartao>1?' '+v.parcelas_cartao+'x':''}${v.forma_pagamento==='Cartão'&&v.taxa_maquineta>0?' ('+v.taxa_maquineta+'%)':''}</span>`:''}
+      ${v.forma_pagamento==='Cartão'&&v.valor_liquido&&Number(v.valor_liquido)!==Number(v.total)?`<br><span style="font-size:10px;color:var(--green-dim)">Líquido: R$ ${f(v.valor_liquido)}</span>`:''}
     </td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" title="Gerar pedido em PDF" onclick="gerarPedidoPDF('${v.id}')">🧾</button>
@@ -1899,6 +1907,83 @@ function removerProdutoSelecionado(codigo) {
   atualizarSelecionados();
 }
 
+// Taxas padrão da maquineta (1x a 10x) — usadas se o usuário ainda não configurou
+const TAXAS_MAQUINETA_PADRAO = {1:2.5,2:4.0,3:5.0,4:6.0,5:7.0,6:8.0,7:9.0,8:10.0,9:11.0,10:12.0};
+
+function getTaxasMaquineta() {
+  try {
+    const raw = currentProfile?.taxas_maquineta;
+    if (!raw) return {...TAXAS_MAQUINETA_PADRAO};
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== 'object' || !Object.keys(parsed).length) return {...TAXAS_MAQUINETA_PADRAO};
+    return {...TAXAS_MAQUINETA_PADRAO, ...parsed};
+  } catch(e) { return {...TAXAS_MAQUINETA_PADRAO}; }
+}
+
+function abrirConfigTaxas() {
+  const taxas = getTaxasMaquineta();
+  document.getElementById('modal-body').innerHTML = `
+    <h3>⚙️ Configurar Taxas da Maquineta</h3>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:16px">
+      Defina o percentual cobrado pela maquineta para cada quantidade de parcelas no cartão.
+      Esse valor será descontado do total da venda para calcular o valor líquido recebido.
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+      ${Array.from({length:10},(_,i)=>i+1).map(n=>`
+        <div class="form-group">
+          <label>${n}x</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="cfg-taxa-${n}" value="${taxas[n]??0}" min="0" max="100" step="0.01" style="flex:1">
+            <span style="font-size:13px;color:var(--gray-400)">%</span>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" onclick="salvarConfigTaxas()">💾 Salvar Taxas</button>
+    </div>`;
+  openModal();
+}
+
+async function salvarConfigTaxas() {
+  const taxas = {};
+  for (let n=1;n<=10;n++) {
+    taxas[n] = parseFloat(document.getElementById('cfg-taxa-'+n)?.value)||0;
+  }
+  const taxasStr = JSON.stringify(taxas);
+  const { error } = await sb.from('profiles').update({taxas_maquineta:taxasStr}).eq('id',currentUser.id);
+  if (error) { showToast('Erro ao salvar taxas','error'); return; }
+  currentProfile.taxas_maquineta = taxasStr;
+  closeModal();
+  showToast('Taxas da maquineta salvas!','success');
+  atualizarTaxaCartao();
+}
+
+function atualizarTaxaCartao() {
+  const taxas = getTaxasMaquineta();
+  const parcelas = parseInt(document.getElementById('v-parcelas-cartao')?.value)||1;
+  const taxaPct  = Number(taxas[parcelas]||0);
+  const hidden   = document.getElementById('v-taxa-maquineta');
+  if (hidden) hidden.value = taxaPct;
+
+  // Calcula valor líquido com base no total atual da venda
+  const sel = window._produtosSelecionados||[];
+  const subtotal = sel.reduce(function(a,p){
+    const isBoni = p.bonificacao||p._isBoni||false;
+    return a + (isBoni ? 0 : Number(p.venda)*(p.qty||1));
+  },0);
+  const descPct = getDescontoPct(subtotal);
+  const total = subtotal * (1-descPct/100);
+  const valorLiquido = total * (1 - taxaPct/100);
+
+  const info = document.getElementById('taxa-cartao-info');
+  if (info) {
+    info.innerHTML = taxaPct>0
+      ? `Taxa: <strong>${taxaPct}%</strong> &nbsp;→&nbsp; Valor líquido a receber: <strong style="color:var(--green-dim)">R$ ${f(valorLiquido)}</strong> <span style="color:var(--red)">(- R$ ${f(total-valorLiquido)})</span>`
+      : `Taxa: <strong>0%</strong> — configure as taxas para ver o cálculo`;
+  }
+}
+
 function onFormaPagamentoChange() {
   const forma = document.getElementById('v-forma-pgto')?.value;
   const campoTaxa = document.getElementById('campo-taxa-maquineta');
@@ -1907,6 +1992,10 @@ function onFormaPagamentoChange() {
 
   if (campoTaxa) campoTaxa.style.display = forma==='Cartão' ? 'block' : 'none';
   if (campoParc) campoParc.style.display = forma==='Promissória' ? 'block' : 'none';
+
+  if (forma === 'Cartão') {
+    atualizarTaxaCartao();
+  }
 
   if (forma === 'Promissória') {
     atualizarPreviewParcelas();
@@ -2024,7 +2113,9 @@ function atualizarSelecionados() {
       tot.innerHTML = '<span style="color:#1E293B;font-size:16px;font-weight:700">💰 Total: R$ ' + f(total) + '</span>';
     }
   }
-  if (document.getElementById('v-forma-pgto')?.value === 'Promissória') atualizarPreviewParcelas();
+  const formaAtual = document.getElementById('v-forma-pgto')?.value;
+  if (formaAtual === 'Promissória') atualizarPreviewParcelas();
+  if (formaAtual === 'Cartão') atualizarTaxaCartao();
 }
 
 function fecharSugestoes() {
@@ -2311,6 +2402,8 @@ async function registrarVenda() {
   const obs = document.getElementById('v-obs')?.value.trim()||'';
   const formaPgto = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
   const taxaMaquineta = formaPgto==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
+  const parcelasCartao = formaPgto==='Cartão' ? (parseInt(document.getElementById('v-parcelas-cartao')?.value)||1) : 1;
+  const valorLiquido = formaPgto==='Cartão' ? total*(1-taxaMaquineta/100) : total;
   const numParcelas = formaPgto==='Promissória' ? (parseInt(document.getElementById('v-num-parcelas')?.value)||2) : 0;
 
   // Promissória: pagamento sempre fica pendente até as parcelas serem pagas
@@ -2319,7 +2412,7 @@ async function registrarVenda() {
   const { data: vendaInserida, error } = await sb.from('vendas').insert({
     user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status:statusFinal,
     data_venda:data, observacao:obs, itens_bonificacao:itensBoniStr,
-    forma_pagamento:formaPgto, taxa_maquineta:taxaMaquineta
+    forma_pagamento:formaPgto, taxa_maquineta:taxaMaquineta, parcelas_cartao:parcelasCartao, valor_liquido:valorLiquido
   }).select().single();
   if (error) { showToast('Erro ao registrar venda','error'); return; }
 
@@ -4515,3 +4608,4 @@ init();
 </script>
 </body>
 </html>
+      
