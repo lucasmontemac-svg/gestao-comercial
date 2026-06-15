@@ -331,6 +331,7 @@
 
   <!-- MOBILE MENU (mais opções) -->
   <div id="mobile-menu" style="display:none;position:fixed;bottom:60px;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,.1);z-index:99;padding:8px 0;">
+    <div onclick="navigate('pedidos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📋 Pedidos de Venda</div>
     <div onclick="navigate('clientes');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">👤 Clientes</div>
     <div onclick="navigate('precos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📈 Comparativo</div>
     <div onclick="navigate('precif');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💲 Precificação</div>
@@ -528,6 +529,7 @@ function setupApp() {
     {id:'dashboard',icon:'📊',label:'Dashboard'},
     {id:'estoque',  icon:'📦',label:'Estoque'},
     {id:'vendas',   icon:'🧾',label:'Venda Detalhada'},
+    {id:'pedidos',  icon:'📋',label:'Pedidos de Venda'},
     {id:'clientes', icon:'👤',label:'Clientes'},
     {id:'resumo',   icon:'💰',label:'Controle de Vendas'},
     {id:'precos',   icon:'📈',label:'Comparativo'},
@@ -564,6 +566,7 @@ function navItem(i) {
 // ══════════════════════════════════════════════════════
 const TITLES = {
   dashboard:'Dashboard', estoque:'📦 Controle de Estoque', vendas:'🧾 Venda Detalhada',
+  pedidos:'📋 Pedidos de Venda',
   clientes:'👤 Clientes', resumo:'💰 Controle de Vendas', precos:'📈 Comparativo de Preços', precif:'💲 Precificação',
   despesas:'💸 Despesas', 'admin-dash':'Painel Administrativo', 'admin-clients':'Clientes',
   'admin-acessos':'Controle de Acesso', 'admin-planos':'Planos e Cobranças'
@@ -577,7 +580,7 @@ async function navigate(view) {
   const c = document.getElementById('main-content');
   c.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div></div>`;
   const renders = {
-    dashboard: renderDashboard, estoque: renderEstoque, vendas: renderVendas, clientes: renderClientes,
+    dashboard: renderDashboard, estoque: renderEstoque, vendas: renderVendas, pedidos: renderPedidos, clientes: renderClientes,
     resumo: renderResumo, precos: renderPrecos, precif: renderPrecif, despesas: renderDespesas,
     'admin-dash': renderAdminDash, 'admin-clients': renderAdminClients,
     'admin-acessos': renderAdminAcessos, 'admin-planos': renderAdminPlanos,
@@ -1637,8 +1640,9 @@ async function renderVendas(c) {
         <input type="text" id="v-obs" style="width:100%" placeholder="Ex: Placa veículo ABC-1234, entrega agendada...">
       </div>
     </div>
-    <div style="margin-top:16px">
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-success" onclick="registrarVenda()">✅ Registrar Venda</button>
+      <button class="btn btn-outline" onclick="salvarPedidoVenda()" title="Salva como pedido — não deduz estoque nem entra em relatórios até ser finalizado">📋 Salvar como Pedido de Venda</button>
     </div>
   </div>
   <div class="table-card">
@@ -2652,7 +2656,7 @@ async function confirmarExclusaoVenda(id) {
 }
 
 
-async function registrarVenda() {
+function coletarDadosVenda() {
   const sel     = window._produtosSelecionados||[];
   const cliente = document.getElementById('v-cliente').value.trim();
   const tel     = document.getElementById('v-tel').value.trim();
@@ -2662,17 +2666,52 @@ async function registrarVenda() {
   const _descModo = window._descontoModo||'total';
   const desc = _descModo==='item' ? getEfetivoDescPct(sel) : getDescontoPct(_subtotalBruto); // sempre em %
   const status  = document.getElementById('v-status').value;
-  if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
-  if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
+  const obs = document.getElementById('v-obs')?.value.trim()||'';
+  const formaPgto = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
+  const taxaMaquineta = formaPgto==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
+  const parcelasCartao = formaPgto==='Cartão' ? (parseInt(document.getElementById('v-parcelas-cartao')?.value)||1) : 1;
+  const numParcelas = formaPgto==='Promissória' ? (parseInt(document.getElementById('v-num-parcelas')?.value)||2) : 0;
+  const cpf = document.getElementById('v-cpf')?.value.trim()||'';
+
+  // Separa itens normais e bonificações
+  const itensBoni = sel.filter(p=>p.bonificacao||p._isBoni).map(p=>p.codigo);
+  const codigos = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
+  const itensBoniStr = itensBoni.join(',');
+
+  const vencimentos = [];
+  if (formaPgto==='Promissória') {
+    for (let i=1;i<=numParcelas;i++) vencimentos.push(document.getElementById('parcela-venc-'+i)?.value || null);
+  }
+
+  return {sel, cliente, tel, cpf, contato, data, desc, status, obs, codigos, itensBoniStr,
+    formaPgto, taxaMaquineta, parcelasCartao, numParcelas, vencimentos};
+}
+
+function validarFormVenda(dados, exigirVencimentos) {
+  if (!dados.cliente) { showToast('Informe o nome do cliente','error'); return false; }
+  if (!dados.sel.length) { showToast('Selecione ao menos um produto','error'); return false; }
+  if (exigirVencimentos && dados.formaPgto === 'Promissória') {
+    for (let i=0;i<dados.numParcelas;i++) {
+      if (!dados.vencimentos[i]) {
+        showToast(`❌ Informe o vencimento da Parcela ${i+1}/${dados.numParcelas}`, 'error');
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// Valida estoque, registra a venda em "vendas", gera parcelas, deduz estoque e sincroniza cliente/CPF.
+// Retorna {vendaInserida, total} em caso de sucesso, ou null se bloqueado/erro.
+async function concretizarVenda(dados) {
+  const sel = dados.sel;
 
   // ── VALIDAÇÃO PROMISSÓRIA — exige vencimento de cada parcela ──
-  if (document.getElementById('v-forma-pgto')?.value === 'Promissória') {
-    const numParc = parseInt(document.getElementById('v-num-parcelas')?.value)||1;
-    for (let i=1;i<=numParc;i++) {
-      const venc = document.getElementById('parcela-venc-'+i)?.value;
-      if (!venc) {
-        showToast(`❌ Informe o vencimento da Parcela ${i}/${numParc}`, 'error');
-        return;
+  if (dados.formaPgto === 'Promissória') {
+    for (let i=0;i<dados.numParcelas;i++) {
+      if (!dados.vencimentos[i]) {
+        showToast(`❌ Informe o vencimento da Parcela ${i+1}/${dados.numParcelas}`, 'error');
+        return null;
       }
     }
   }
@@ -2687,58 +2726,47 @@ async function registrarVenda() {
     if (qty > disponivel) {
       const tipoEstq = isBoniItem ? 'de bonificação' : '';
       showToast(`❌ Estoque insuficiente para ${p.nome}: disponível ${disponivel} ${tipoEstq}, solicitado ${qty}`, 'error');
-      return; // bloqueia a venda
+      return null; // bloqueia a venda
     }
   }
 
-  // Separa itens normais e bonificações
-  const itensBoni = sel.filter(p=>p.bonificacao||p._isBoni).map(p=>p.codigo);
-  const codigos = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
-  const itensBoniStr = itensBoni.join(',');
   // Total exclui bonificações
   let total = sel.reduce((a,p)=>{
     if(p.bonificacao||p._isBoni) return a;
     return a+(Number(p.venda)*(p.qty||1));
-  },0) * (1-desc/100);
-  const obs = document.getElementById('v-obs')?.value.trim()||'';
-  const formaPgto = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
-  const taxaMaquineta = formaPgto==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
-  const parcelasCartao = formaPgto==='Cartão' ? (parseInt(document.getElementById('v-parcelas-cartao')?.value)||1) : 1;
-  const numParcelas = formaPgto==='Promissória' ? (parseInt(document.getElementById('v-num-parcelas')?.value)||2) : 0;
+  },0) * (1-dados.desc/100);
 
   // valorBruto = valor cobrado do cliente (já com desconto aplicado)
   const valorBruto = total;
   // Para Cartão, a RECEITA registrada (total) é o valor LÍQUIDO já descontando a taxa da maquineta
-  const valorLiquido = formaPgto==='Cartão' ? valorBruto*(1-taxaMaquineta/100) : valorBruto;
+  const valorLiquido = dados.formaPgto==='Cartão' ? valorBruto*(1-dados.taxaMaquineta/100) : valorBruto;
   total = valorLiquido; // total passa a representar a receita real
 
   // Promissória: pagamento sempre fica pendente até as parcelas serem pagas
-  const statusFinal = formaPgto==='Promissória' ? 'pendente' : status;
-
-  const cpf = document.getElementById('v-cpf')?.value.trim()||'';
+  const statusFinal = dados.formaPgto==='Promissória' ? 'pendente' : dados.status;
 
   const { data: vendaInserida, error } = await sb.from('vendas').insert({
-    user_id:currentUser.id, cliente, telefone:tel, cpf, contato, codigos, desconto:desc, total, status:statusFinal,
-    data_venda:data, observacao:obs, itens_bonificacao:itensBoniStr,
-    forma_pagamento:formaPgto, taxa_maquineta:taxaMaquineta, parcelas_cartao:parcelasCartao,
+    user_id:currentUser.id, cliente:dados.cliente, telefone:dados.tel, cpf:dados.cpf, contato:dados.contato,
+    codigos:dados.codigos, desconto:dados.desc, total, status:statusFinal,
+    data_venda:dados.data, observacao:dados.obs, itens_bonificacao:dados.itensBoniStr,
+    forma_pagamento:dados.formaPgto, taxa_maquineta:dados.taxaMaquineta, parcelas_cartao:dados.parcelasCartao,
     valor_liquido:valorLiquido, valor_bruto:valorBruto
   }).select().single();
-  if (error) { showToast('Erro ao registrar venda','error'); return; }
+  if (error) { showToast('Erro ao registrar venda','error'); return null; }
 
   // Gera parcelas se Promissória
-  if (formaPgto==='Promissória' && numParcelas>=1 && vendaInserida) {
-    const valorParcela = total/numParcelas;
+  if (dados.formaPgto==='Promissória' && dados.numParcelas>=1 && vendaInserida) {
+    const valorParcela = total/dados.numParcelas;
     const parcelasInsert = [];
-    for (let i=1;i<=numParcelas;i++) {
-      const vencInput = document.getElementById('parcela-venc-'+i)?.value || null;
+    for (let i=1;i<=dados.numParcelas;i++) {
       parcelasInsert.push({
         user_id: currentUser.id,
         venda_id: vendaInserida.id,
-        cliente,
+        cliente: dados.cliente,
         numero: i,
-        total_parcelas: numParcelas,
+        total_parcelas: dados.numParcelas,
         valor: valorParcela,
-        vencimento: vencInput,
+        vencimento: dados.vencimentos[i-1] || null,
         status: 'pendente'
       });
     }
@@ -2760,23 +2788,231 @@ async function registrarVenda() {
       }
     }
   }
+
   // Auto-cadastra o cliente no módulo Clientes, se ainda não existir — ou sincroniza o CPF se ele foi informado
   const clientesCad = window._clientesCad||[];
-  const clienteExistente = clientesCad.find(cl => (cl.nome||'').trim().toLowerCase() === cliente.toLowerCase());
+  const clienteExistente = clientesCad.find(cl => (cl.nome||'').trim().toLowerCase() === dados.cliente.toLowerCase());
   if (!clienteExistente) {
     const { data: novoCliente } = await sb.from('clientes').insert({
-      user_id: currentUser.id, nome: cliente, telefone: tel, cpf
+      user_id: currentUser.id, nome: dados.cliente, telefone: dados.tel, cpf: dados.cpf
     }).select().single();
     if (novoCliente) window._clientesCad.push(novoCliente);
-  } else if (cpf && clienteExistente.cpf !== cpf) {
-    await sb.from('clientes').update({cpf}).eq('id', clienteExistente.id);
-    clienteExistente.cpf = cpf;
+  } else if (dados.cpf && clienteExistente.cpf !== dados.cpf) {
+    await sb.from('clientes').update({cpf: dados.cpf}).eq('id', clienteExistente.id);
+    clienteExistente.cpf = dados.cpf;
   }
 
+  return { vendaInserida, total };
+}
+
+async function registrarVenda() {
+  const dados = coletarDadosVenda();
+  if (!validarFormVenda(dados, false)) return;
+
+  const result = await concretizarVenda(dados);
+  if (!result) return;
+
   window._produtosSelecionados = [];
-  showToast(formaPgto==='Promissória' ? `Venda registrada! ${numParcelas}x de R$ ${f(total/numParcelas)}` : 'Venda registrada com sucesso!','success');
+  showToast(dados.formaPgto==='Promissória' ? `Venda registrada! ${dados.numParcelas}x de R$ ${f(result.total/dados.numParcelas)}` : 'Venda registrada com sucesso!','success');
   navigate('vendas');
 }
+
+async function salvarPedidoVenda() {
+  const dados = coletarDadosVenda();
+  if (!validarFormVenda(dados, true)) return;
+
+  // Total estimado para exibição na lista de pedidos
+  let totalEst = dados.sel.reduce((a,p)=>{
+    if(p.bonificacao||p._isBoni) return a;
+    return a+(Number(p.venda)*(p.qty||1));
+  },0) * (1-dados.desc/100);
+  if (dados.formaPgto==='Cartão') totalEst = totalEst*(1-dados.taxaMaquineta/100);
+
+  const { error } = await sb.from('pedidos_venda').insert({
+    user_id: currentUser.id, cliente: dados.cliente, telefone: dados.tel, cpf: dados.cpf, contato: dados.contato,
+    codigos: dados.codigos, desconto: dados.desc, total_estimado: totalEst, status: dados.status,
+    data_venda: dados.data, observacao: dados.obs, itens_bonificacao: dados.itensBoniStr,
+    forma_pagamento: dados.formaPgto, taxa_maquineta: dados.taxaMaquineta, parcelas_cartao: dados.parcelasCartao,
+    num_parcelas: dados.numParcelas, parcelas_vencimentos: dados.vencimentos, itens_json: dados.sel
+  });
+  if (error) { showToast('Erro ao salvar pedido: '+error.message,'error'); return; }
+
+  window._produtosSelecionados = [];
+  showToast('📋 Pedido de venda salvo!','success');
+  navigate('pedidos');
+}
+
+async function renderPedidos(c) {
+  const [{ data: pedidos }, { data: produtos }] = await Promise.all([
+    sb.from('pedidos_venda').select('*').eq('user_id', currentUser.id).order('created_at',{ascending:false}),
+    sb.from('produtos').select('codigo,nome').eq('user_id', currentUser.id),
+  ]);
+  window._pedidosAll = pedidos||[];
+  window._pedidosProdutos = produtos||[];
+
+  c.innerHTML = `
+  <div class="form-card" style="margin-bottom:16px;padding:14px 16px;background:rgba(46,123,250,.06);border:1px solid rgba(46,123,250,.15)">
+    <div style="font-size:13px;color:var(--blue)">
+      💡 <strong>Como funciona:</strong> ao salvar uma venda como <strong>Pedido</strong>, ela fica registrada aqui
+      sem afetar o estoque ou os relatórios. Quando o pedido for concretizado de fato,
+      clique em <strong>✅ Finalizar</strong> — aí o estoque será deduzido e a venda passará a contar nos relatórios normalmente.
+    </div>
+  </div>
+  <div class="table-card">
+    <div class="table-header">
+      <h3>Pedidos de Venda Pendentes (${(pedidos||[]).length})</h3>
+    </div>
+    <table>
+      <thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total Estimado</th><th>Pagamento</th><th>Ações</th></tr></thead>
+      <tbody id="tbody-pedidos">${renderPedidosRows(pedidos||[], produtos||[])}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderPedidosRows(pedidos, produtos) {
+  if (!pedidos.length) return '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum pedido de venda pendente</td></tr>';
+  return pedidos.map(ped => {
+    const codes = (ped.codigos||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const boniSet = new Set((ped.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+    const grupos = {};
+    codes.forEach(c=>{ grupos[c]=(grupos[c]||0)+1; });
+    const nomesStr = Object.entries(grupos).map(([cod,qty])=>{
+      const p = produtos.find(x=>x.codigo===cod);
+      const nome = p?p.nome:cod;
+      const isBoni = boniSet.has(cod.toUpperCase());
+      return `${nome}${qty>1?` (${qty}x)`:''}${isBoni?' 🎁':''}`;
+    }).join(', ');
+    const nomeEsc = (ped.cliente||'').replace(/'/g,"\\'");
+    return `<tr>
+      <td><strong>${ped.cliente}</strong>${ped.telefone?`<br><span style="font-size:11px;color:var(--gray-400)">${ped.telefone}</span>`:''}</td>
+      <td style="font-size:12px;max-width:260px">${nomesStr}</td>
+      <td>${ped.data_venda?ped.data_venda.split('-').reverse().join('/'):'—'}</td>
+      <td style="font-weight:700;color:var(--green-dim)">R$ ${f(ped.total_estimado)}</td>
+      <td><span class="badge badge-blue">${ped.forma_pagamento||'—'}</span></td>
+      <td style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="verDetalhesPedido('${ped.id}')" title="Ver detalhes">👁</button>
+        <button class="btn btn-sm btn-success" onclick="confirmarFinalizarPedido('${ped.id}')" title="Finalizar e registrar como venda">✅ Finalizar</button>
+        <button class="btn btn-sm btn-danger" onclick="excluirPedido('${ped.id}','${nomeEsc}')" title="Excluir pedido">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function verDetalhesPedido(id) {
+  const ped = (window._pedidosAll||[]).find(p=>p.id===id);
+  if (!ped) { showToast('Pedido não encontrado','error'); return; }
+  const produtos = window._pedidosProdutos||[];
+  const itens = ped.itens_json||[];
+  const boniSet = new Set((ped.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+
+  const itensHtml = itens.map(p=>{
+    const isBoni = boniSet.has((p.codigo||'').toUpperCase()) || p.bonificacao || p._isBoni;
+    const qty = p.qty||1;
+    const subt = isBoni ? 0 : Number(p.venda)*qty;
+    return `<tr style="border-bottom:1px solid var(--gray-100)">
+      <td style="padding:6px 8px;font-size:12px">${p.codigo} — ${p.nome}${isBoni?' <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 5px;border-radius:8px">🎁 Boni</span>':''}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:12px">${qty}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:12px">${isBoni?'—':'R$ '+f(p.venda)}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:12px;font-weight:600">${isBoni?'R$ 0,00':'R$ '+f(subt)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('modal-body').innerHTML = `
+    <h3>📋 Pedido de Venda — ${ped.cliente}</h3>
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;font-size:12px;color:var(--gray-600)">
+      ${ped.telefone?`<span>📱 ${ped.telefone}</span>`:''}
+      ${ped.cpf?`<span>🪪 ${ped.cpf}</span>`:''}
+      <span>📅 ${ped.data_venda?ped.data_venda.split('-').reverse().join('/'):'—'}</span>
+      <span>${ped.forma_pagamento||'—'}${ped.forma_pagamento==='Promissória'?` (${ped.num_parcelas}x)`:''}</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+      <thead><tr>
+        <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Item</th>
+        <th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Qtd</th>
+        <th style="text-align:right;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Unit.</th>
+        <th style="text-align:right;padding:6px 8px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-200)">Subtotal</th>
+      </tr></thead>
+      <tbody>${itensHtml}</tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gray-50);border-radius:8px;padding:12px 16px;margin-bottom:8px">
+      <span style="font-size:13px;color:var(--gray-600)">Desconto: ${Number(ped.desconto||0).toFixed(1)}%</span>
+      <span style="font-size:18px;font-weight:800;font-family:Sora;color:var(--green-dim)">💰 R$ ${f(ped.total_estimado)}</span>
+    </div>
+    ${ped.observacao?`<p style="font-size:12px;color:var(--gray-400);margin-bottom:8px">Obs: ${ped.observacao}</p>`:''}
+    <p style="font-size:11px;color:var(--gray-400)">⚠️ Total estimado — pode variar se preços/estoque mudarem antes da finalização.</p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Fechar</button>
+      <button class="btn btn-success" onclick="closeModal();confirmarFinalizarPedido('${id}')">✅ Finalizar Pedido</button>
+    </div>`;
+  openModal();
+}
+
+function confirmarFinalizarPedido(id) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>✅ Finalizar Pedido de Venda</h3>
+    <p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">
+      Ao finalizar, esta venda será <strong>registrada oficialmente</strong>: o estoque será deduzido,
+      parcelas (se houver) serão geradas, o cliente será sincronizado e o pedido será removido desta lista.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" id="finalizar-pedido-btn">✅ Confirmar e Finalizar</button>
+    </div>`;
+  document.getElementById('finalizar-pedido-btn').addEventListener('click', function(){ executarFinalizacaoPedido(id); });
+  openModal();
+}
+
+async function executarFinalizacaoPedido(id) {
+  const ped = (window._pedidosAll||[]).find(p=>p.id===id);
+  if (!ped) { showToast('Pedido não encontrado','error'); return; }
+
+  const sel = ped.itens_json||[];
+  if (!sel.length) { showToast('Pedido sem itens','error'); return; }
+
+  const dados = {
+    sel,
+    cliente: ped.cliente, tel: ped.telefone||'', cpf: ped.cpf||'', contato: ped.contato||'',
+    data: ped.data_venda, desc: Number(ped.desconto)||0, status: ped.status||'pago',
+    obs: ped.observacao||'', codigos: ped.codigos||'', itensBoniStr: ped.itens_bonificacao||'',
+    formaPgto: ped.forma_pagamento||'Dinheiro', taxaMaquineta: Number(ped.taxa_maquineta)||0,
+    parcelasCartao: ped.parcelas_cartao||1, numParcelas: ped.num_parcelas||0,
+    vencimentos: ped.parcelas_vencimentos||[]
+  };
+
+  // Garante que a lista de clientes esteja carregada para sincronizar CPF/cadastro
+  if (!window._clientesCad) {
+    const { data: clientesCad } = await sb.from('clientes').select('*').eq('user_id', currentUser.id);
+    window._clientesCad = clientesCad||[];
+  }
+
+  const result = await concretizarVenda(dados);
+  if (!result) return; // erro/estoque insuficiente — toast já exibido, modal de confirmação permanece
+
+  await sb.from('pedidos_venda').delete().eq('id', id);
+  closeModal();
+  showToast(dados.formaPgto==='Promissória'
+    ? `✅ Pedido finalizado! ${dados.numParcelas}x de R$ ${f(result.total/dados.numParcelas)}`
+    : '✅ Pedido finalizado e venda registrada!', 'success');
+  navigate('pedidos');
+}
+
+function excluirPedido(id, cliente) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>🗑 Excluir Pedido</h3>
+    <p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">Deseja excluir o pedido de venda de <strong>${cliente}</strong>? Esta ação não pode ser desfeita.</p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" id="del-pedido-btn">🗑 Excluir</button>
+    </div>`;
+  document.getElementById('del-pedido-btn').addEventListener('click', async function(){
+    await sb.from('pedidos_venda').delete().eq('id', id);
+    closeModal();
+    showToast('Pedido excluído!','success');
+    navigate('pedidos');
+  });
+  openModal();
+}
+
 
 function formatarCPF(input) {
   let v = input.value.replace(/\D/g,'').slice(0,11);
