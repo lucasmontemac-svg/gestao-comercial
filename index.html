@@ -1507,25 +1507,39 @@ async function renderVendas(c) {
         <div id="v-cliente-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
       <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="v-tel" placeholder="(81) 9 9999-9999"></div>
+      <div class="form-group"><label>CPF</label><input type="text" id="v-cpf" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)"></div>
       <div class="form-group"><label>Meio de Contato</label>
         <select id="v-contato"><option>WhatsApp</option><option>Presencial</option><option>Instagram</option><option>Indicação</option></select>
       </div>
       <div class="form-group"><label>Data da Venda</label><input type="date" id="v-data" value="${new Date().toISOString().split('T')[0]}"></div>
       <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          Desconto
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <label style="margin:0">Desconto</label>
           <span style="display:inline-flex;background:var(--gray-100);border-radius:20px;padding:2px">
-            <button type="button" id="v-desc-tipo-pct" onclick="setDescontoTipo('pct')"
-              style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:var(--blue);color:white;font-family:Inter,sans-serif">%</button>
-            <button type="button" id="v-desc-tipo-val" onclick="setDescontoTipo('val')"
-              style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--gray-600);font-family:Inter,sans-serif">R$</button>
+            <button type="button" id="v-desc-modo-total" onclick="setDescontoModo('total')"
+              style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:var(--blue);color:white;font-family:Inter,sans-serif">Total do Pedido</button>
+            <button type="button" id="v-desc-modo-item" onclick="setDescontoModo('item')"
+              style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--gray-600);font-family:Inter,sans-serif">Por Produto</button>
           </span>
-        </label>
-        <div style="display:flex;align-items:center;gap:4px">
-          <span id="v-desc-prefix" style="font-size:13px;color:var(--gray-400);font-weight:600;min-width:16px"></span>
-          <input type="number" id="v-desc" value="0" min="0" oninput="calcTotalVenda()"
-            style="flex:1;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:Inter,sans-serif;color:var(--gray-800);outline:none">
-          <span id="v-desc-suffix" style="font-size:13px;color:var(--gray-400);font-weight:600">%</span>
+        </div>
+        <div id="v-desc-total-wrap">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="display:inline-flex;background:var(--gray-100);border-radius:20px;padding:2px">
+              <button type="button" id="v-desc-tipo-pct" onclick="setDescontoTipo('pct')"
+                style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:var(--blue);color:white;font-family:Inter,sans-serif">%</button>
+              <button type="button" id="v-desc-tipo-val" onclick="setDescontoTipo('val')"
+                style="padding:2px 10px;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--gray-600);font-family:Inter,sans-serif">R$</button>
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <span id="v-desc-prefix" style="font-size:13px;color:var(--gray-400);font-weight:600;min-width:16px"></span>
+            <input type="number" id="v-desc" value="0" min="0" oninput="calcTotalVenda()"
+              style="flex:1;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:Inter,sans-serif;color:var(--gray-800);outline:none">
+            <span id="v-desc-suffix" style="font-size:13px;color:var(--gray-400);font-weight:600">%</span>
+          </div>
+        </div>
+        <div id="v-desc-item-hint" style="display:none;font-size:12px;color:var(--gray-400);background:var(--gray-50);border-radius:8px;padding:10px 12px">
+          💡 Defina o % de desconto em cada produto na lista de itens selecionados abaixo.
         </div>
       </div>
       <div class="form-group"><label>Status</label>
@@ -1871,6 +1885,7 @@ function filtrarVendas(termo) {
 
 // Produtos selecionados para a venda atual
 window._produtosSelecionados = [];
+window._descontoModo = 'total';
 
 function buscarProdutoVenda(termo) {
   const prods = window._produtosVenda||[];
@@ -1954,7 +1969,8 @@ function buscarClienteVenda(termo) {
   sug.innerHTML = matches.map(c=>{
     const nomeEsc = (c.nome||'').replace(/'/g,"\\'");
     const telEsc  = (c.telefone||'').replace(/'/g,"\\'");
-    return `<div onclick="selecionarClienteVenda('${nomeEsc}','${telEsc}')"
+    const cpfEsc  = (c.cpf||'').replace(/'/g,"\\'");
+    return `<div onclick="selecionarClienteVenda('${nomeEsc}','${telEsc}','${cpfEsc}')"
       style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--gray-100)"
       onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
       <strong>${c.nome}</strong>${c.telefone?` <span style="color:var(--gray-400);font-size:11px">${c.telefone}</span>`:''}
@@ -1963,10 +1979,12 @@ function buscarClienteVenda(termo) {
   sug.style.display='block';
 }
 
-function selecionarClienteVenda(nome, telefone) {
+function selecionarClienteVenda(nome, telefone, cpf) {
   document.getElementById('v-cliente').value = nome;
   const telInput = document.getElementById('v-tel');
   if (telInput && telefone) telInput.value = telefone;
+  const cpfInput = document.getElementById('v-cpf');
+  if (cpfInput) cpfInput.value = cpf||'';
   fecharSugestoesCliente();
 }
 
@@ -2195,17 +2213,59 @@ function getDescontoPct(subtotal) {
   return 0;
 }
 
+function getEfetivoDescPct(sel) {
+  let semDesc = 0, comDesc = 0;
+  sel.forEach(p => {
+    if (p.bonificacao||p._isBoni) return;
+    const qty = p.qty||1;
+    const bruto = Number(p.venda)*qty;
+    const pct = Math.min(100, Math.max(0, Number(p.descPct)||0));
+    semDesc += bruto;
+    comDesc += bruto*(1-pct/100);
+  });
+  return semDesc>0 ? (semDesc-comDesc)/semDesc*100 : 0;
+}
+
+function setDescontoModo(modo) {
+  window._descontoModo = modo;
+  const btnTotal = document.getElementById('v-desc-modo-total');
+  const btnItem  = document.getElementById('v-desc-modo-item');
+  const wrapTotal= document.getElementById('v-desc-total-wrap');
+  const hintItem = document.getElementById('v-desc-item-hint');
+  if (btnTotal) { btnTotal.style.background = modo==='total'?'var(--blue)':'transparent'; btnTotal.style.color = modo==='total'?'white':'var(--gray-600)'; }
+  if (btnItem)  { btnItem.style.background  = modo==='item' ?'var(--blue)':'transparent'; btnItem.style.color  = modo==='item' ?'white':'var(--gray-600)'; }
+  if (wrapTotal) wrapTotal.style.display = modo==='total' ? '' : 'none';
+  if (hintItem)  hintItem.style.display  = modo==='item'  ? '' : 'none';
+  if (modo === 'total') {
+    // Zera os descontos por item ao voltar para desconto total
+    (window._produtosSelecionados||[]).forEach(p => { p.descPct = 0; });
+  } else {
+    // Zera o desconto total ao mudar para desconto por produto
+    const inp = document.getElementById('v-desc');
+    if (inp) inp.value = 0;
+  }
+  atualizarSelecionados();
+}
+
+function atualizarDescItemVenda(codigo, val) {
+  const p = (window._produtosSelecionados||[]).find(x=>x.codigo===codigo);
+  if (p) { p.descPct = Math.min(100, Math.max(0, parseFloat(val)||0)); atualizarSelecionados(); }
+}
+
 function atualizarSelecionados() {
   const sel = window._produtosSelecionados;
   const subtotal0 = sel.reduce(function(a,p){return a+(Number(p.venda)*(p.qty||1));},0);
-  const descPct = getDescontoPct(subtotal0);
+  const modo = window._descontoModo||'total';
+  const descPct = modo === 'item' ? getEfetivoDescPct(sel) : getDescontoPct(subtotal0);
 
   const desc = descPct; // alias para compatibilidade
   const selDiv = document.getElementById('v-selecionados');
   if (selDiv) selDiv.innerHTML = sel.map(function(p) {
     const qty = p.qty||1;
     const isBoni = p.bonificacao||p._isBoni||false;
-    const subtProd = isBoni ? 0 : Number(p.venda) * qty;
+    const itemDesc = Math.min(100, Math.max(0, Number(p.descPct)||0));
+    const subtProdBruto = isBoni ? 0 : Number(p.venda) * qty;
+    const subtProd = isBoni ? 0 : subtProdBruto * (1-itemDesc/100);
     const bgColor  = isBoni ? '#78350F' : '#1A3A5C';
     return '<div style="display:inline-flex;align-items:center;gap:6px;background:'+bgColor+';border-radius:10px;padding:6px 10px;margin:2px;font-size:12px">'
       + (isBoni?'<span style="font-size:12px">🎁</span>':'')
@@ -2219,6 +2279,15 @@ function atualizarSelecionados() {
       + 'style="width:40px;background:transparent;border:none;color:white;font-size:12px;font-weight:700;text-align:center;outline:none" '
       + 'onchange="atualizarQtyVenda(\'' + p.codigo + '\',this.value)">'
       + '</div>'
+      + (!isBoni && modo==='item'
+        ? '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);border-radius:6px;padding:2px 6px">'
+          + '<span style="color:rgba(255,255,255,.6);font-size:10px">Desc:</span>'
+          + '<input type="number" value="' + itemDesc + '" min="0" max="100" '
+          + 'style="width:40px;background:transparent;border:none;color:#FCD34D;font-size:12px;font-weight:700;text-align:center;outline:none" '
+          + 'onchange="atualizarDescItemVenda(\'' + p.codigo + '\',this.value)">'
+          + '<span style="color:rgba(255,255,255,.6);font-size:10px">%</span>'
+          + '</div>'
+        : '')
       + '<label style="display:flex;align-items:center;gap:3px;cursor:pointer" title="Marcar como bonificação nesta venda">'
       + '<input type="checkbox" ' + (isBoni?'checked':'') + ' onchange="toggleBoniVenda(\'' + p.codigo + '\',this.checked)" style="accent-color:#F59E0B;width:12px;height:12px">'
       + '<span style="color:rgba(255,255,255,.6);font-size:10px">Boni</span>'
@@ -2233,7 +2302,13 @@ function atualizarSelecionados() {
     const isBoni = p.bonificacao||p._isBoni||false;
     return a + (isBoni ? 0 : Number(p.venda)*(p.qty||1));
   },0);
-  const total    = subtotal * (1-descPct/100);
+  const total    = modo === 'item'
+    ? sel.reduce(function(a,p){
+        if (p.bonificacao||p._isBoni) return a;
+        const itemDesc = Math.min(100, Math.max(0, Number(p.descPct)||0));
+        return a + Number(p.venda)*(p.qty||1)*(1-itemDesc/100);
+      },0)
+    : subtotal * (1-descPct/100);
   const prev = document.getElementById('v-preview');
   const tot  = document.getElementById('v-total');
   if (prev) prev.textContent = '';
@@ -2241,9 +2316,14 @@ function atualizarSelecionados() {
     if (!sel.length) {
       tot.innerHTML = '';
     } else if (descPct > 0) {
-      const tipo = window._descontoTipo||'pct';
-      const descRaw = parseFloat(document.getElementById('v-desc')?.value)||0;
-      const descLabel = tipo==='pct' ? descRaw+'%' : 'R$ '+f(descRaw);
+      let descLabel;
+      if (modo === 'item') {
+        descLabel = descPct.toFixed(1)+'% (média)';
+      } else {
+        const tipo = window._descontoTipo||'pct';
+        const descRaw = parseFloat(document.getElementById('v-desc')?.value)||0;
+        descLabel = tipo==='pct' ? descRaw+'%' : 'R$ '+f(descRaw);
+      }
       tot.innerHTML = '<span style="color:#94A3B8;font-size:12px;text-decoration:line-through">R$ ' + f(subtotal) + '</span>'
         + '&nbsp; -' + descLabel + '&nbsp; '
         + '<span style="color:#22C55E;font-size:16px;font-weight:700">💰 R$ ' + f(total) + '</span>';
@@ -2503,9 +2583,9 @@ async function registrarVenda() {
   const tel     = document.getElementById('v-tel').value.trim();
   const contato = document.getElementById('v-contato').value;
   const data    = document.getElementById('v-data').value;
-  const _descRaw = parseFloat(document.getElementById('v-desc').value)||0;
   const _subtotalBruto = sel.reduce((a,p)=>a+(Number(p.venda)*(p.qty||1)),0);
-  const desc = getDescontoPct(_subtotalBruto); // sempre em %
+  const _descModo = window._descontoModo||'total';
+  const desc = _descModo==='item' ? getEfetivoDescPct(sel) : getDescontoPct(_subtotalBruto); // sempre em %
   const status  = document.getElementById('v-status').value;
   if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
   if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
@@ -2559,8 +2639,10 @@ async function registrarVenda() {
   // Promissória: pagamento sempre fica pendente até as parcelas serem pagas
   const statusFinal = formaPgto==='Promissória' ? 'pendente' : status;
 
+  const cpf = document.getElementById('v-cpf')?.value.trim()||'';
+
   const { data: vendaInserida, error } = await sb.from('vendas').insert({
-    user_id:currentUser.id, cliente, telefone:tel, contato, codigos, desconto:desc, total, status:statusFinal,
+    user_id:currentUser.id, cliente, telefone:tel, cpf, contato, codigos, desconto:desc, total, status:statusFinal,
     data_venda:data, observacao:obs, itens_bonificacao:itensBoniStr,
     forma_pagamento:formaPgto, taxa_maquineta:taxaMaquineta, parcelas_cartao:parcelasCartao,
     valor_liquido:valorLiquido, valor_bruto:valorBruto
@@ -2601,19 +2683,30 @@ async function registrarVenda() {
       }
     }
   }
-  // Auto-cadastra o cliente no módulo Clientes, se ainda não existir
+  // Auto-cadastra o cliente no módulo Clientes, se ainda não existir — ou sincroniza o CPF se ele foi informado
   const clientesCad = window._clientesCad||[];
-  const jaExiste = clientesCad.some(cl => (cl.nome||'').trim().toLowerCase() === cliente.toLowerCase());
-  if (!jaExiste) {
+  const clienteExistente = clientesCad.find(cl => (cl.nome||'').trim().toLowerCase() === cliente.toLowerCase());
+  if (!clienteExistente) {
     const { data: novoCliente } = await sb.from('clientes').insert({
-      user_id: currentUser.id, nome: cliente, telefone: tel
+      user_id: currentUser.id, nome: cliente, telefone: tel, cpf
     }).select().single();
     if (novoCliente) window._clientesCad.push(novoCliente);
+  } else if (cpf && clienteExistente.cpf !== cpf) {
+    await sb.from('clientes').update({cpf}).eq('id', clienteExistente.id);
+    clienteExistente.cpf = cpf;
   }
 
   window._produtosSelecionados = [];
   showToast(formaPgto==='Promissória' ? `Venda registrada! ${numParcelas}x de R$ ${f(total/numParcelas)}` : 'Venda registrada com sucesso!','success');
   navigate('vendas');
+}
+
+function formatarCPF(input) {
+  let v = input.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 9) v = v.slice(0,9) + '-' + v.slice(9);
+  if (v.length > 6) v = v.slice(0,6) + '.' + v.slice(6);
+  if (v.length > 3) v = v.slice(0,3) + '.' + v.slice(3);
+  input.value = v;
 }
 
 function montarEndereco(enderecoBase, numero) {
@@ -2672,6 +2765,7 @@ async function renderClientes(c) {
     <div class="form-grid">
       <div class="form-group"><label>Nome Completo</label><input type="text" id="cl-nome" placeholder="Nome do cliente"></div>
       <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="cl-tel" placeholder="(00) 00000-0000"></div>
+      <div class="form-group"><label>CPF</label><input type="text" id="cl-cpf" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)"></div>
       <div class="form-group"><label>E-mail</label><input type="email" id="cl-email" placeholder="email@exemplo.com"></div>
       <div class="form-group">
         <label>CEP</label>
@@ -2787,26 +2881,29 @@ function renderClientesTable() {
 
 
 async function importarClientesDeVendas() {
-  const { data: vendas } = await sb.from('vendas').select('cliente,telefone,data_venda').eq('user_id', currentUser.id).order('data_venda',{ascending:false});
+  const { data: vendas } = await sb.from('vendas').select('cliente,telefone,cpf,data_venda').eq('user_id', currentUser.id).order('data_venda',{ascending:false});
   const { data: clientesAtuais } = await sb.from('clientes').select('nome').eq('user_id', currentUser.id);
 
   const existentes = new Set((clientesAtuais||[]).map(c=>(c.nome||'').trim().toLowerCase()));
 
-  // Agrupa por nome (case-insensitive), pegando o telefone mais recente não vazio
+  // Agrupa por nome (case-insensitive), pegando o telefone/CPF mais recente não vazio
   const novosMap = {};
   (vendas||[]).forEach(v => {
     const nome = (v.cliente||'').trim();
     if (!nome) return;
     const key = nome.toLowerCase();
     if (existentes.has(key)) return; // já cadastrado
-    if (!novosMap[key]) novosMap[key] = { nome, telefone: v.telefone||'' };
-    else if (!novosMap[key].telefone && v.telefone) novosMap[key].telefone = v.telefone;
+    if (!novosMap[key]) novosMap[key] = { nome, telefone: v.telefone||'', cpf: v.cpf||'' };
+    else {
+      if (!novosMap[key].telefone && v.telefone) novosMap[key].telefone = v.telefone;
+      if (!novosMap[key].cpf && v.cpf) novosMap[key].cpf = v.cpf;
+    }
   });
 
   const novos = Object.values(novosMap);
   if (!novos.length) { showToast('Todos os clientes do histórico já estão cadastrados!','success'); return; }
 
-  const inserts = novos.map(n => ({ user_id: currentUser.id, nome: n.nome, telefone: n.telefone }));
+  const inserts = novos.map(n => ({ user_id: currentUser.id, nome: n.nome, telefone: n.telefone, cpf: n.cpf }));
   const { error } = await sb.from('clientes').insert(inserts);
   if (error) { showToast('Erro ao importar clientes','error'); return; }
 
@@ -2830,6 +2927,7 @@ async function salvarCliente() {
     user_id: currentUser.id,
     nome,
     telefone: document.getElementById('cl-tel').value.trim(),
+    cpf: document.getElementById('cl-cpf').value.trim(),
     email: document.getElementById('cl-email').value.trim(),
     cep: document.getElementById('cl-cep').value.trim(),
     endereco: montarEndereco(document.getElementById('cl-endereco').value, document.getElementById('cl-numero').value),
@@ -2847,6 +2945,7 @@ function openEditCliente(cl) {
     <div class="form-grid">
       <div class="form-group"><label>Nome Completo</label><input type="text" id="ecl-nome" value="${(cl.nome||'').replace(/"/g,'&quot;')}"></div>
       <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="ecl-tel" value="${cl.telefone||''}"></div>
+      <div class="form-group"><label>CPF</label><input type="text" id="ecl-cpf" value="${cl.cpf||''}" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)"></div>
       <div class="form-group"><label>E-mail</label><input type="email" id="ecl-email" value="${cl.email||''}"></div>
       <div class="form-group">
         <label>CEP</label>
@@ -2870,6 +2969,7 @@ async function salvarEdicaoCliente2(id) {
   const dados = {
     nome: document.getElementById('ecl-nome').value.trim(),
     telefone: document.getElementById('ecl-tel').value.trim(),
+    cpf: document.getElementById('ecl-cpf').value.trim(),
     email: document.getElementById('ecl-email').value.trim(),
     cep: document.getElementById('ecl-cep').value.trim(),
     endereco: montarEndereco(document.getElementById('ecl-endereco').value, document.getElementById('ecl-numero').value),
