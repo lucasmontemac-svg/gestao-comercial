@@ -2616,6 +2616,17 @@ async function registrarVenda() {
   navigate('vendas');
 }
 
+function montarEndereco(enderecoBase, numero) {
+  enderecoBase = (enderecoBase||'').trim();
+  numero = (numero||'').trim();
+  if (!numero) return enderecoBase;
+  if (!enderecoBase) return numero;
+  // Insere o número logo após o logradouro (primeiro trecho antes da vírgula)
+  const idx = enderecoBase.indexOf(',');
+  if (idx === -1) return enderecoBase + ', ' + numero;
+  return enderecoBase.slice(0, idx) + ', ' + numero + enderecoBase.slice(idx);
+}
+
 function formatarCEP(input) {
   let v = input.value.replace(/\D/g,'').slice(0,8);
   if (v.length > 5) v = v.slice(0,5) + '-' + v.slice(5);
@@ -2668,7 +2679,8 @@ async function renderClientes(c) {
           oninput="formatarCEP(this)" onblur="buscarCEPCliente(this.value,'cl')">
         <div id="cl-cep-status" style="font-size:11px;color:var(--gray-400);margin-top:4px;min-height:14px"></div>
       </div>
-      <div class="form-group"><label>Endereço</label><input type="text" id="cl-endereco" placeholder="Rua, número, bairro, cidade"></div>
+      <div class="form-group"><label>Número</label><input type="text" id="cl-numero" placeholder="Nº da casa/apto"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Endereço</label><input type="text" id="cl-endereco" placeholder="Rua, bairro, cidade"></div>
       <div class="form-group" style="grid-column:span 2"><label>Observação</label><input type="text" id="cl-obs" placeholder="Ex: cliente revendedor, prefere PIX..."></div>
     </div>
     <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarCliente()">+ Adicionar Cliente</button></div>
@@ -2820,7 +2832,7 @@ async function salvarCliente() {
     telefone: document.getElementById('cl-tel').value.trim(),
     email: document.getElementById('cl-email').value.trim(),
     cep: document.getElementById('cl-cep').value.trim(),
-    endereco: document.getElementById('cl-endereco').value.trim(),
+    endereco: montarEndereco(document.getElementById('cl-endereco').value, document.getElementById('cl-numero').value),
     observacao: document.getElementById('cl-obs').value.trim(),
   };
   const { error } = await sb.from('clientes').insert(dados);
@@ -2842,7 +2854,8 @@ function openEditCliente(cl) {
           oninput="formatarCEP(this)" onblur="buscarCEPCliente(this.value,'ecl')">
         <div id="ecl-cep-status" style="font-size:11px;color:var(--gray-400);margin-top:4px;min-height:14px"></div>
       </div>
-      <div class="form-group"><label>Endereço</label><input type="text" id="ecl-endereco" value="${(cl.endereco||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-group"><label>Número</label><input type="text" id="ecl-numero" placeholder="Nº da casa/apto"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Endereço</label><input type="text" id="ecl-endereco" value="${(cl.endereco||'').replace(/"/g,'&quot;')}"></div>
       <div class="form-group" style="grid-column:span 2"><label>Observação</label><input type="text" id="ecl-obs" value="${(cl.observacao||'').replace(/"/g,'&quot;')}"></div>
     </div>
     <div class="modal-footer">
@@ -2859,7 +2872,7 @@ async function salvarEdicaoCliente2(id) {
     telefone: document.getElementById('ecl-tel').value.trim(),
     email: document.getElementById('ecl-email').value.trim(),
     cep: document.getElementById('ecl-cep').value.trim(),
-    endereco: document.getElementById('ecl-endereco').value.trim(),
+    endereco: montarEndereco(document.getElementById('ecl-endereco').value, document.getElementById('ecl-numero').value),
     observacao: document.getElementById('ecl-obs').value.trim(),
   };
   if (!dados.nome) { showToast('Informe o nome','error'); return; }
