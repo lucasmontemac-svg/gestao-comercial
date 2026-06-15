@@ -655,8 +655,7 @@ async function renderDashboard(c) {
   // ── Produto mais vendido ──
   const contProd = {};
   todasVendas.forEach(v => {
-    (v.codigos||'').split(',').forEach(c => {
-      const cod = c.trim().toUpperCase();
+    codigosNaoBoni(v).forEach(cod => {
       if (cod) contProd[cod] = (contProd[cod]||0) + 1;
     });
   });
@@ -3345,7 +3344,7 @@ function renderTabProdutos(vendas, prods) {
       <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Margem</th>
     </tr></thead>
     <tbody id="tbody-resumo">${prods.map(p=>{
-      const codes = vendas.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()));
+      const codes = vendas.flatMap(v=>codigosNaoBoni(v));
       const qtd   = codes.filter(c=>c===p.codigo.toUpperCase()).length;
       const rec   = qtd*p.venda; const custo=qtd*p.custo; const luc=rec-custo;
       const mg    = rec>0?(luc/rec*100):0;
@@ -3515,8 +3514,7 @@ function renderTabRanking(vendas, prods) {
   const recProd  = {};
   const lucProd  = {};
   vendas.forEach(v=>{
-    (v.codigos||'').split(',').forEach(c=>{
-      const cod = c.trim().toUpperCase();
+    codigosNaoBoni(v).forEach(cod=>{
       if (!cod) return;
       const p = prods.find(x=>x.codigo.toUpperCase()===cod);
       contProd[cod] = (contProd[cod]||0)+1;
@@ -3627,8 +3625,7 @@ function renderTabGiro(prods, vendas) {
   const hoje = new Date();
   const contProd = {};
   vendas.forEach(v=>{
-    (v.codigos||'').split(',').forEach(c=>{
-      const cod=c.trim().toUpperCase();
+    codigosNaoBoni(v).forEach(cod=>{
       if(cod) contProd[cod]=(contProd[cod]||0)+1;
     });
   });
@@ -3713,7 +3710,7 @@ async function exportarExcel() {
     ['Produto','Categoria','Qtd Vendida','Receita (R$)','Custo (R$)','Lucro (R$)','Margem %']
   ];
   prods.forEach(p => {
-    const codes = vendas.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()));
+    const codes = vendas.flatMap(v=>codigosNaoBoni(v));
     const qtd = codes.filter(c=>c===p.codigo.toUpperCase()).length;
     const rec = qtd*Number(p.venda); const custo=qtd*Number(p.custo); const luc=rec-custo;
     const mg  = rec>0?(luc/rec*100):0;
@@ -3752,7 +3749,7 @@ async function exportarExcel() {
   // Sheet 5: Giro Estoque
   const giroData = [['Produto','Categoria','Estoque Atual','Qtd Vendida','Valor em Estoque (R$)','Situação']];
   const contP = {};
-  vendas.forEach(v=>(v.codigos||'').split(',').forEach(c=>{const cod=c.trim().toUpperCase();if(cod)contP[cod]=(contP[cod]||0)+1;}));
+  vendas.forEach(v=>codigosNaoBoni(v).forEach(cod=>{if(cod)contP[cod]=(contP[cod]||0)+1;}));
   prods.forEach(p=>{
     const qtdV=contP[p.codigo.toUpperCase()]||0;
     const val=Number(p.estoque)*Number(p.custo);
@@ -3844,7 +3841,7 @@ async function exportarPDF() {
   doc.setFontSize(11); doc.setFont('helvetica','bold');
   doc.text('RESUMO POR PRODUTO', 14, y); y+=6;
   const prodRows = prods.map(p=>{
-    const codes=vendas.flatMap(v=>(v.codigos||'').split(',').map(s=>s.trim().toUpperCase()));
+    const codes=vendas.flatMap(v=>codigosNaoBoni(v));
     const qtd=codes.filter(c=>c===p.codigo.toUpperCase()).length;
     const rec=qtd*Number(p.venda); const custo=qtd*Number(p.custo); const luc=rec-custo;
     const mg=rec>0?(luc/rec*100):0;
@@ -5203,6 +5200,11 @@ async function criarCliente() {
 // HELPERS
 // ══════════════════════════════════════════════════════
 function f(n){return(+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+// Retorna os códigos de produto de uma venda, excluindo as unidades dadas como bonificação
+function codigosNaoBoni(v) {
+  const boniSet = new Set((v.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+  return (v.codigos||'').split(',').map(s=>s.trim().toUpperCase()).filter(c=>c && !boniSet.has(c));
+}
 function fmtDate(d){if(!d)return'—';const[y,m,dd]=(d+'').split('-');return`${dd}/${m}/${y}`;}
 function openModal(){document.getElementById('modal-overlay').classList.add('open');}
 function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
