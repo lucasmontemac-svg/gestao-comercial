@@ -1030,14 +1030,18 @@ function removerProdutoEntrada(codigo) {
 function renderProdutoRows(produtos) {
   if (!produtos.length) return '<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>';
   return produtos.map(p => {
+    const isServico = p.tipo === 'servico';
     const mg = p.venda>0?((p.venda-p.custo)/p.venda*100):0;
+    const estoqueCell = isServico
+      ? '<span style="font-size:11px;background:#EFF6FF;color:var(--blue);padding:3px 8px;border-radius:10px;font-weight:700">🔧 Serviço</span>'
+      : `${p.estoque} un.${p.estoque_bonificacao>0?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 5px;border-radius:10px;font-weight:700">🎁 +${p.estoque_bonificacao}</span>`:''}`;
     return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}">
       <td><strong>${p.codigo}</strong></td>
-      <td>${p.nome}${p.bonificacao?'<span style="margin-left:6px;font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:10px">🎁 Bonificação</span>':''}</td>
+      <td>${p.nome}${p.bonificacao?'<span style="margin-left:6px;font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:10px">🎁 Bonificação</span>':''}${isServico?'<span style="margin-left:6px;font-size:10px;background:#EFF6FF;color:var(--blue);padding:2px 6px;border-radius:10px">🔧 Serviço</span>':''}</td>
       <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
-      <td>R$ ${f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
-      <td style="${p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${p.estoque} un.${p.estoque_bonificacao>0?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 5px;border-radius:10px;font-weight:700">🎁 +${p.estoque_bonificacao}</span>`:''}</td>
-      <td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td>
+      <td>${isServico?'—':'R$ '+f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
+      <td style="${!isServico && p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${estoqueCell}</td>
+      <td>${isServico?'—':'<span class="badge badge-'+(mg>=30?'green':mg>=20?'yellow':'red')+'">'+mg.toFixed(1)+'%</span>'}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" title="Editar" onclick='openEditProduto(${JSON.stringify(p)})'>✏️</button>
         <button class="btn btn-sm btn-danger" title="Excluir" onclick="excluirProduto('${p.id}','${p.nome}')">🗑</button>
@@ -1183,34 +1187,48 @@ function openEditProduto(p) {
       <div class="form-group"><label>Código</label><input type="text" id="ep-cod" value="${p.codigo}"></div>
       <div class="form-group"><label>Nome</label><input type="text" id="ep-nome" value="${p.nome}"></div>
       <div class="form-group"><label>Categoria</label><input type="text" id="ep-cat" value="${p.categoria||''}"></div>
-      <div class="form-group"><label>Custo Unitário (R$)</label><input type="number" id="ep-custo" value="${p.custo}"></div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="ep-tipo" onchange="toggleTipoServico('ep')">
+          <option value="produto"${(p.tipo||'produto')==='produto'?' selected':''}>📦 Produto</option>
+          <option value="servico"${p.tipo==='servico'?' selected':''}>🔧 Serviço</option>
+        </select>
+      </div>
+      <div class="form-group" id="ep-custo-group"><label>Custo Unitário (R$)</label><input type="number" id="ep-custo" value="${p.custo}"></div>
       <div class="form-group"><label>Preço de Venda (R$)</label><input type="number" id="ep-venda" value="${p.venda}"></div>
-      <div class="form-group"><label>Estoque</label><input type="number" id="ep-estq" value="${p.estoque}"></div>
+      <div class="form-group" id="ep-estq-group"><label>Estoque</label><input type="number" id="ep-estq" value="${p.estoque}"></div>
     </div>
-    <div style="margin-top:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+    <div id="ep-boni-box" style="margin-top:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px">
       <input type="checkbox" id="ep-bonificacao" ${p.bonificacao?'checked':''} style="width:16px;height:16px;accent-color:var(--yellow)">
       <div>
         <label for="ep-bonificacao" style="font-size:13px;font-weight:600;color:#92400E;cursor:pointer">🎁 Este produto é uma BONIFICAÇÃO</label>
         <div style="font-size:11px;color:#B45309;margin-top:2px">Não entra como custo nem valor de estoque.</div>
       </div>
     </div>
+    <div id="ep-servico-info" style="display:none;margin-top:12px;background:rgba(46,123,250,.08);border:1px solid rgba(46,123,250,.25);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--blue)">
+      🔧 Serviços não têm custo de mercadoria nem estoque — representam mão de obra. O valor de venda é cobrado normalmente, mas não entra no CMV nem no "Estoque em Valor".
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-success" onclick="salvarEdicaoProduto('${p.id}')">💾 Salvar</button>
     </div>`;
   openModal();
+  toggleTipoServico('ep');
 }
 
 async function salvarEdicaoProduto(id) {
   const isBoniEd = document.getElementById('ep-bonificacao')?.checked||false;
+  const tipoEd = document.getElementById('ep-tipo')?.value||'produto';
+  const isServicoEd = tipoEd === 'servico';
   const dados = {
     codigo: document.getElementById('ep-cod').value.trim().toUpperCase(),
     nome:   document.getElementById('ep-nome').value.trim(),
     categoria: document.getElementById('ep-cat').value.trim(),
-    custo:  isBoniEd ? 0 : (parseFloat(document.getElementById('ep-custo').value)||0),
+    tipo: tipoEd,
+    custo:  (isBoniEd||isServicoEd) ? 0 : (parseFloat(document.getElementById('ep-custo').value)||0),
     venda:  parseFloat(document.getElementById('ep-venda').value)||0,
-    estoque: parseInt(document.getElementById('ep-estq').value)||0,
-    bonificacao: isBoniEd,
+    estoque: isServicoEd ? 0 : (parseInt(document.getElementById('ep-estq').value)||0),
+    bonificacao: isServicoEd ? false : isBoniEd,
   };
   const { error } = await sb.from('produtos').update(dados).eq('id', id);
   if (error) { showToast('Erro ao salvar','error'); return; }
@@ -1431,6 +1449,19 @@ async function registrarEntrada() {
   navigate('estoque');
 }
 
+function toggleTipoServico(prefix) {
+  const tipo = document.getElementById(prefix+'-tipo')?.value || 'produto';
+  const isServico = tipo === 'servico';
+  const estqGroup = document.getElementById(prefix+'-estq-group');
+  const custoGroup = document.getElementById(prefix+'-custo-group');
+  const boniBox = document.getElementById(prefix+'-boni-box');
+  const servicoInfo = document.getElementById(prefix+'-servico-info');
+  if (estqGroup)  estqGroup.style.display  = isServico ? 'none' : '';
+  if (custoGroup) custoGroup.style.display = isServico ? 'none' : '';
+  if (boniBox)    boniBox.style.display    = isServico ? 'none' : '';
+  if (servicoInfo) servicoInfo.style.display = isServico ? '' : 'none';
+}
+
 async function openProdutoModal() {
   // Busca o último código para gerar o próximo automaticamente
   const { data: prods } = await sb.from('produtos').select('codigo').eq('user_id', currentUser.id);
@@ -1449,16 +1480,26 @@ async function openProdutoModal() {
       <div class="form-group"><label>Código (automático)</label><input type="text" id="np-cod" value="${nextCode}" style="background:var(--gray-100);font-weight:700;color:var(--blue)"></div>
       <div class="form-group"><label>Nome</label><input type="text" id="np-nome" placeholder="Nome do produto"></div>
       <div class="form-group"><label>Categoria</label><input type="text" id="np-cat" placeholder="Ex: Whey"></div>
-      <div class="form-group"><label>Custo Unitário (R$)</label><input type="number" id="np-custo" placeholder="0,00"></div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="np-tipo" onchange="toggleTipoServico('np')">
+          <option value="produto">📦 Produto</option>
+          <option value="servico">🔧 Serviço</option>
+        </select>
+      </div>
+      <div class="form-group" id="np-custo-group"><label>Custo Unitário (R$)</label><input type="number" id="np-custo" placeholder="0,00"></div>
       <div class="form-group"><label>Preço de Venda (R$)</label><input type="number" id="np-venda" placeholder="0,00"></div>
-      <div class="form-group"><label>Estoque Inicial</label><input type="number" id="np-estq" placeholder="0"></div>
+      <div class="form-group" id="np-estq-group"><label>Estoque Inicial</label><input type="number" id="np-estq" placeholder="0"></div>
     </div>
-    <div style="margin-top:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px">
+    <div id="np-boni-box" style="margin-top:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px">
       <input type="checkbox" id="np-bonificacao" style="width:16px;height:16px;accent-color:var(--yellow)">
       <div>
         <label for="np-bonificacao" style="font-size:13px;font-weight:600;color:#92400E;cursor:pointer">🎁 Este produto é uma BONIFICAÇÃO</label>
         <div style="font-size:11px;color:#B45309;margin-top:2px">Não entra como custo nem valor de estoque. Apenas controla a quantidade disponível.</div>
       </div>
+    </div>
+    <div id="np-servico-info" style="display:none;margin-top:12px;background:rgba(46,123,250,.08);border:1px solid rgba(46,123,250,.25);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--blue)">
+      🔧 Serviços não têm custo de mercadoria nem estoque — representam mão de obra. O valor de venda é cobrado normalmente, mas não entra no CMV nem no "Estoque em Valor".
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
@@ -1469,15 +1510,18 @@ async function openProdutoModal() {
 
 async function salvarProduto() {
   const isBoni = document.getElementById('np-bonificacao')?.checked||false;
+  const tipo = document.getElementById('np-tipo')?.value||'produto';
+  const isServico = tipo === 'servico';
   const dados = {
     user_id:currentUser.id,
     codigo: document.getElementById('np-cod').value.trim().toUpperCase(),
     nome:   document.getElementById('np-nome').value.trim(),
     categoria: document.getElementById('np-cat').value.trim(),
-    custo:  isBoni ? 0 : (parseFloat(document.getElementById('np-custo').value)||0),
+    tipo,
+    custo:  (isBoni||isServico) ? 0 : (parseFloat(document.getElementById('np-custo').value)||0),
     venda:  parseFloat(document.getElementById('np-venda').value)||0,
-    estoque: parseInt(document.getElementById('np-estq').value)||0,
-    bonificacao: isBoni,
+    estoque: isServico ? 0 : (parseInt(document.getElementById('np-estq').value)||0),
+    bonificacao: isServico ? false : isBoni,
   };
   if (!dados.codigo || !dados.nome) { showToast('Código e nome são obrigatórios','error'); return; }
   const { error } = await sb.from('produtos').insert(dados);
@@ -1489,7 +1533,7 @@ async function salvarProduto() {
 
 async function renderVendas(c) {
   const [{ data: produtos }, { data: vendas }, { data: clientesCad }] = await Promise.all([
-    sb.from('produtos').select('codigo,nome,venda,custo,bonificacao,categoria,estoque,estoque_bonificacao').eq('user_id',currentUser.id),
+    sb.from('produtos').select('codigo,nome,venda,custo,bonificacao,categoria,estoque,estoque_bonificacao,tipo').eq('user_id',currentUser.id),
     sb.from('vendas').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false}),
     sb.from('clientes').select('*').eq('user_id',currentUser.id),
   ]);
@@ -1907,9 +1951,13 @@ function buscarProdutoVenda(termo) {
   if (!encontrados.length) { sug.style.display='none'; return; }
 
   sug.innerHTML = encontrados.map(p => {
+    const isServico = p.tipo === 'servico';
     const estoque = Number(p.estoque)||0;
     const estoqueBoni = Number(p.estoque_bonificacao)||0;
     const corEstoque = estoque<=0 ? 'var(--red)' : estoque<=3 ? 'var(--yellow)' : 'var(--gray-400)';
+    const infoExtra = isServico
+      ? `<span style="color:var(--blue);font-size:11px;margin-left:8px">🔧 Serviço</span>`
+      : `<span style="color:${corEstoque};font-size:11px;margin-left:8px">📦 ${estoque} un.${estoqueBoni>0?` <span style="color:var(--yellow)">🎁+${estoqueBoni}</span>`:''}</span>`;
     return `
     <div onclick="selecionarProduto('${p.codigo}')" 
       style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;font-size:13px;transition:background .1s"
@@ -1917,7 +1965,7 @@ function buscarProdutoVenda(termo) {
       <div>
         <strong style="color:var(--blue)">${p.codigo}</strong>
         <span style="color:var(--gray-800);margin-left:8px">${p.nome}</span>
-        <span style="color:${corEstoque};font-size:11px;margin-left:8px">📦 ${estoque} un.${estoqueBoni>0?` <span style="color:var(--yellow)">🎁+${estoqueBoni}</span>`:''}</span>
+        ${infoExtra}
       </div>
       <span style="color:var(--green-dim);font-weight:600">R$ ${f(p.venda)}</span>
     </div>`;
@@ -2213,15 +2261,28 @@ function getDescontoPct(subtotal) {
   return 0;
 }
 
+function calcDescontoItem(p) {
+  const qty = p.qty||1;
+  const bruto = Number(p.venda)*qty;
+  const tipo = p.descTipo||'pct';
+  const val  = Math.max(0, Number(p.descVal)||0);
+  let descontoValor;
+  if (tipo === 'val') {
+    descontoValor = Math.min(bruto, val);
+  } else {
+    const pct = Math.min(100, val);
+    descontoValor = bruto*pct/100;
+  }
+  return { bruto, descontoValor, liquido: bruto - descontoValor };
+}
+
 function getEfetivoDescPct(sel) {
   let semDesc = 0, comDesc = 0;
   sel.forEach(p => {
     if (p.bonificacao||p._isBoni) return;
-    const qty = p.qty||1;
-    const bruto = Number(p.venda)*qty;
-    const pct = Math.min(100, Math.max(0, Number(p.descPct)||0));
+    const { bruto, liquido } = calcDescontoItem(p);
     semDesc += bruto;
-    comDesc += bruto*(1-pct/100);
+    comDesc += liquido;
   });
   return semDesc>0 ? (semDesc-comDesc)/semDesc*100 : 0;
 }
@@ -2238,7 +2299,7 @@ function setDescontoModo(modo) {
   if (hintItem)  hintItem.style.display  = modo==='item'  ? '' : 'none';
   if (modo === 'total') {
     // Zera os descontos por item ao voltar para desconto total
-    (window._produtosSelecionados||[]).forEach(p => { p.descPct = 0; });
+    (window._produtosSelecionados||[]).forEach(p => { p.descTipo = 'pct'; p.descVal = 0; });
   } else {
     // Zera o desconto total ao mudar para desconto por produto
     const inp = document.getElementById('v-desc');
@@ -2247,9 +2308,19 @@ function setDescontoModo(modo) {
   atualizarSelecionados();
 }
 
+function setDescTipoItem(codigo, tipo) {
+  const p = (window._produtosSelecionados||[]).find(x=>x.codigo===codigo);
+  if (p) { p.descTipo = tipo; p.descVal = 0; atualizarSelecionados(); }
+}
+
 function atualizarDescItemVenda(codigo, val) {
   const p = (window._produtosSelecionados||[]).find(x=>x.codigo===codigo);
-  if (p) { p.descPct = Math.min(100, Math.max(0, parseFloat(val)||0)); atualizarSelecionados(); }
+  if (p) {
+    let v = Math.max(0, parseFloat(val)||0);
+    if ((p.descTipo||'pct') === 'pct') v = Math.min(100, v);
+    p.descVal = v;
+    atualizarSelecionados();
+  }
 }
 
 function atualizarSelecionados() {
@@ -2263,9 +2334,10 @@ function atualizarSelecionados() {
   if (selDiv) selDiv.innerHTML = sel.map(function(p) {
     const qty = p.qty||1;
     const isBoni = p.bonificacao||p._isBoni||false;
-    const itemDesc = Math.min(100, Math.max(0, Number(p.descPct)||0));
-    const subtProdBruto = isBoni ? 0 : Number(p.venda) * qty;
-    const subtProd = isBoni ? 0 : subtProdBruto * (1-itemDesc/100);
+    const itemDescTipo = p.descTipo||'pct';
+    const itemDescVal  = Math.max(0, Number(p.descVal)||0);
+    const { liquido: subtProdLiquido } = calcDescontoItem(p);
+    const subtProd = isBoni ? 0 : subtProdLiquido;
     const bgColor  = isBoni ? '#78350F' : '#1A3A5C';
     return '<div style="display:inline-flex;align-items:center;gap:6px;background:'+bgColor+';border-radius:10px;padding:6px 10px;margin:2px;font-size:12px">'
       + (isBoni?'<span style="font-size:12px">🎁</span>':'')
@@ -2280,12 +2352,17 @@ function atualizarSelecionados() {
       + 'onchange="atualizarQtyVenda(\'' + p.codigo + '\',this.value)">'
       + '</div>'
       + (!isBoni && modo==='item'
-        ? '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);border-radius:6px;padding:2px 6px">'
+        ? '<div style="display:flex;align-items:center;gap:3px;background:rgba(255,255,255,.1);border-radius:6px;padding:2px 6px">'
           + '<span style="color:rgba(255,255,255,.6);font-size:10px">Desc:</span>'
-          + '<input type="number" value="' + itemDesc + '" min="0" max="100" '
-          + 'style="width:40px;background:transparent;border:none;color:#FCD34D;font-size:12px;font-weight:700;text-align:center;outline:none" '
+          + '<span style="display:inline-flex;background:rgba(255,255,255,.15);border-radius:8px;overflow:hidden">'
+            + '<button type="button" onclick="setDescTipoItem(\'' + p.codigo + '\',\'pct\')" '
+            + 'style="padding:1px 5px;border:none;font-size:9px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:' + (itemDescTipo==='pct'?'#F59E0B':'transparent') + ';color:' + (itemDescTipo==='pct'?'#1E293B':'rgba(255,255,255,.6)') + '">%</button>'
+            + '<button type="button" onclick="setDescTipoItem(\'' + p.codigo + '\',\'val\')" '
+            + 'style="padding:1px 5px;border:none;font-size:9px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:' + (itemDescTipo==='val'?'#F59E0B':'transparent') + ';color:' + (itemDescTipo==='val'?'#1E293B':'rgba(255,255,255,.6)') + '">R$</button>'
+          + '</span>'
+          + '<input type="number" value="' + itemDescVal + '" min="0" ' + (itemDescTipo==='pct'?'max="100"':'') + ' '
+          + 'style="width:48px;background:transparent;border:none;color:#FCD34D;font-size:12px;font-weight:700;text-align:center;outline:none" '
           + 'onchange="atualizarDescItemVenda(\'' + p.codigo + '\',this.value)">'
-          + '<span style="color:rgba(255,255,255,.6);font-size:10px">%</span>'
           + '</div>'
         : '')
       + '<label style="display:flex;align-items:center;gap:3px;cursor:pointer" title="Marcar como bonificação nesta venda">'
@@ -2305,8 +2382,7 @@ function atualizarSelecionados() {
   const total    = modo === 'item'
     ? sel.reduce(function(a,p){
         if (p.bonificacao||p._isBoni) return a;
-        const itemDesc = Math.min(100, Math.max(0, Number(p.descPct)||0));
-        return a + Number(p.venda)*(p.qty||1)*(1-itemDesc/100);
+        return a + calcDescontoItem(p).liquido;
       },0)
     : subtotal * (1-descPct/100);
   const prev = document.getElementById('v-preview');
@@ -2602,8 +2678,9 @@ async function registrarVenda() {
     }
   }
 
-  // ── VALIDAÇÃO DE ESTOQUE — bloqueia venda se não houver quantidade suficiente ──
+  // ── VALIDAÇÃO DE ESTOQUE — bloqueia venda se não houver quantidade suficiente (serviços não têm estoque) ──
   for (const p of sel) {
+    if (p.tipo === 'servico') continue;
     const qty = p.qty||1;
     const isBoniItem = p.bonificacao||p._isBoni||false;
     const { data: prod } = await sb.from('produtos').select('estoque,estoque_bonificacao').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
@@ -2670,6 +2747,7 @@ async function registrarVenda() {
   }
 
   for (const p of sel) {
+    if (p.tipo === 'servico') continue; // serviços não têm estoque a deduzir
     const qty = p.qty||1;
     const isBoniItem = p.bonificacao||p._isBoni||false;
     const { data: prod } = await sb.from('produtos').select('estoque,estoque_bonificacao,bonificacao').eq('user_id',currentUser.id).eq('codigo',p.codigo).maybeSingle();
@@ -3569,9 +3647,11 @@ function renderTabGiro(prods, vendas) {
       <th style="text-align:center;padding:8px 12px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;border-bottom:1px solid var(--gray-200)">Situação</th>
     </tr></thead>
     <tbody>${lista.map(p=>{
+      const isServico = p.tipo === 'servico';
       const valEstq = Number(p.estoque)*Number(p.custo);
       let sit, cor;
-      if (p.qtdVend===0 && p.estoque>0) { sit='⚠️ Parado'; cor='#92400E'; }
+      if (isServico) { sit='🔧 Serviço'; cor='var(--blue)'; }
+      else if (p.qtdVend===0 && p.estoque>0) { sit='⚠️ Parado'; cor='#92400E'; }
       else if (p.estoque===0) { sit='❌ Sem estoque'; cor='var(--red)'; }
       else if (p.estoque<=3) { sit='🔴 Estoque crítico'; cor='var(--red)'; }
       else { sit='✅ Normal'; cor='var(--green-dim)'; }
@@ -3579,9 +3659,9 @@ function renderTabGiro(prods, vendas) {
         <td style="padding:10px 12px;font-size:13px"><strong>${p.nome}</strong>
           ${p.categoria?`<br><span style="font-size:10px;color:var(--gray-400)">${p.categoria}</span>`:''}
         </td>
-        <td style="padding:10px 12px;text-align:center;font-size:13px;font-weight:600;color:${p.estoque<=3?'var(--red)':'var(--gray-800)'}">${p.estoque} un.</td>
+        <td style="padding:10px 12px;text-align:center;font-size:13px;font-weight:600;color:${isServico?'var(--gray-400)':(p.estoque<=3?'var(--red)':'var(--gray-800)')}">${isServico?'—':p.estoque+' un.'}</td>
         <td style="padding:10px 12px;text-align:center;font-size:13px">${p.qtdVend}</td>
-        <td style="padding:10px 12px;text-align:center;font-size:13px">R$ ${f(valEstq)}</td>
+        <td style="padding:10px 12px;text-align:center;font-size:13px">${isServico?'—':'R$ '+f(valEstq)}</td>
         <td style="padding:10px 12px;text-align:center;font-size:12px;font-weight:600;color:${cor}">${sit}</td>
       </tr>`;
     }).join('')}</tbody>
@@ -3853,17 +3933,18 @@ async function renderPrecos(c) {
 function renderComparativoRows(produtos) {
   if (!produtos.length) return '<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>';
   return produtos.map(p=>{
+    const isServico = p.tipo === 'servico';
     const mg=p.venda>0?((p.venda-p.custo)/p.venda*100):0;
     const luc=p.venda-p.custo;
-    const rec=mg>=30?'✅ Ótima margem':mg>=20?'🟡 Margem OK':mg>=10?'⚠️ Margem baixa':'🔴 Revisar preço';
+    const rec=isServico?'🔧 Serviço (mão de obra)':mg>=30?'✅ Ótima margem':mg>=20?'🟡 Margem OK':mg>=10?'⚠️ Margem baixa':'🔴 Revisar preço';
     return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-cod="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}">
       <td><strong>${p.codigo}</strong></td>
-      <td>${p.nome}</td>
+      <td>${p.nome}${isServico?'<span style="margin-left:6px;font-size:10px;background:#EFF6FF;color:var(--blue);padding:2px 6px;border-radius:10px">🔧 Serviço</span>':''}</td>
       <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
-      <td>R$ ${f(p.custo)}</td>
+      <td>${isServico?'—':'R$ '+f(p.custo)}</td>
       <td><strong>R$ ${f(p.venda)}</strong></td>
-      <td><span class="badge badge-${mg>=30?'green':mg>=20?'yellow':'red'}">${mg.toFixed(1)}%</span></td>
-      <td>R$ ${f(luc)}</td>
+      <td>${isServico?'—':'<span class="badge badge-'+(mg>=30?'green':mg>=20?'yellow':'red')+'">'+mg.toFixed(1)+'%</span>'}</td>
+      <td>${isServico?'—':'R$ '+f(luc)}</td>
       <td style="font-size:12px">${rec}</td>
     </tr>`;
   }).join('');
