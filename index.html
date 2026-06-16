@@ -331,7 +331,7 @@
 
   <!-- MOBILE MENU (mais opções) -->
   <div id="mobile-menu" style="display:none;position:fixed;bottom:60px;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,.1);z-index:99;padding:8px 0;">
-    <div onclick="navigate('pedidos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📋 Pedidos de Venda</div>
+    <div onclick="navigate('pedidos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📋 Orçamento</div>
     <div onclick="navigate('clientes');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">👤 Clientes</div>
     <div onclick="navigate('precos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📈 Comparativo</div>
     <div onclick="navigate('precif');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💲 Precificação</div>
@@ -529,7 +529,7 @@ function setupApp() {
     {id:'dashboard',icon:'📊',label:'Dashboard'},
     {id:'estoque',  icon:'📦',label:'Estoque'},
     {id:'vendas',   icon:'🧾',label:'Venda Detalhada'},
-    {id:'pedidos',  icon:'📋',label:'Pedidos de Venda'},
+    {id:'pedidos',  icon:'📋',label:'Orçamento'},
     {id:'clientes', icon:'👤',label:'Clientes'},
     {id:'resumo',   icon:'💰',label:'Controle de Vendas'},
     {id:'precos',   icon:'📈',label:'Comparativo'},
@@ -566,7 +566,7 @@ function navItem(i) {
 // ══════════════════════════════════════════════════════
 const TITLES = {
   dashboard:'Dashboard', estoque:'📦 Controle de Estoque', vendas:'🧾 Venda Detalhada',
-  pedidos:'📋 Pedidos de Venda',
+  pedidos:'📋 Orçamento',
   clientes:'👤 Clientes', resumo:'💰 Controle de Vendas', precos:'📈 Comparativo de Preços', precif:'💲 Precificação',
   despesas:'💸 Despesas', 'admin-dash':'Painel Administrativo', 'admin-clients':'Clientes',
   'admin-acessos':'Controle de Acesso', 'admin-planos':'Planos e Cobranças'
@@ -1644,7 +1644,7 @@ async function renderVendas(c) {
     </div>
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-success" onclick="registrarVenda()">✅ Registrar Venda</button>
-      <button class="btn btn-outline" onclick="salvarPedidoVenda()" title="Salva como pedido — não deduz estoque nem entra em relatórios até ser finalizado">📋 Salvar como Pedido de Venda</button>
+      <button class="btn btn-outline" onclick="salvarPedidoVenda()" title="Salva como orçamento — não deduz estoque nem entra em relatórios até ser finalizado">📋 Salvar como Orçamento</button>
     </div>
   </div>
   <div class="table-card">
@@ -2840,7 +2840,7 @@ async function salvarPedidoVenda() {
   if (error) { showToast('Erro ao salvar pedido: '+error.message,'error'); return; }
 
   window._produtosSelecionados = [];
-  showToast('📋 Pedido de venda salvo!','success');
+  showToast('📋 Orçamento salvo!','success');
   navigate('pedidos');
 }
 
@@ -2857,14 +2857,14 @@ async function renderPedidos(c) {
   c.innerHTML = `
   <div class="form-card" style="margin-bottom:16px;padding:14px 16px;background:rgba(46,123,250,.06);border:1px solid rgba(46,123,250,.15)">
     <div style="font-size:13px;color:var(--blue)">
-      💡 <strong>Como funciona:</strong> ao salvar uma venda como <strong>Pedido</strong>, ela fica registrada aqui
-      sem afetar o estoque ou os relatórios. Quando o pedido for concretizado de fato,
+      💡 <strong>Como funciona:</strong> ao salvar uma venda como <strong>Orçamento</strong>, ela fica registrada aqui
+      sem afetar o estoque ou os relatórios. Quando o orçamento for concretizado de fato,
       clique em <strong>✅ Finalizar</strong> — aí o estoque será deduzido e a venda passará a contar nos relatórios normalmente.
     </div>
   </div>
   <div class="table-card">
     <div class="table-header">
-      <h3>Pedidos de Venda Pendentes (${(pedidos||[]).length})</h3>
+      <h3>Orçamentos Pendentes (${(pedidos||[]).length})</h3>
     </div>
     <table>
       <thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total Estimado</th><th>Pagamento</th><th>Ações</th></tr></thead>
@@ -2874,7 +2874,7 @@ async function renderPedidos(c) {
 }
 
 function renderPedidosRows(pedidos, produtos) {
-  if (!pedidos.length) return '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum pedido de venda pendente</td></tr>';
+  if (!pedidos.length) return '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum orçamento pendente</td></tr>';
   return pedidos.map(ped => {
     const codes = (ped.codigos||'').split(',').map(s=>s.trim()).filter(Boolean);
     const boniSet = new Set((ped.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
@@ -2895,9 +2895,9 @@ function renderPedidosRows(pedidos, produtos) {
       <td><span class="badge badge-blue">${ped.forma_pagamento||'—'}</span></td>
       <td style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="verDetalhesPedido('${ped.id}')" title="Ver detalhes">👁</button>
-        <button class="btn btn-sm btn-outline" onclick="editarPedido('${ped.id}')" title="Editar pedido">✏️</button>
+        <button class="btn btn-sm btn-outline" onclick="editarPedido('${ped.id}')" title="Editar orçamento">✏️</button>
         <button class="btn btn-sm btn-success" onclick="confirmarFinalizarPedido('${ped.id}')" title="Finalizar e registrar como venda">✅ Finalizar</button>
-        <button class="btn btn-sm btn-danger" onclick="excluirPedido('${ped.id}','${nomeEsc}')" title="Excluir pedido">🗑</button>
+        <button class="btn btn-sm btn-danger" onclick="excluirPedido('${ped.id}','${nomeEsc}')" title="Excluir orçamento">🗑</button>
       </td>
     </tr>`;
   }).join('');
@@ -2905,7 +2905,7 @@ function renderPedidosRows(pedidos, produtos) {
 
 async function verDetalhesPedido(id) {
   const ped = (window._pedidosAll||[]).find(p=>p.id===id);
-  if (!ped) { showToast('Pedido não encontrado','error'); return; }
+  if (!ped) { showToast('Orçamento não encontrado','error'); return; }
   const produtos = window._pedidosProdutos||[];
   const itens = ped.itens_json||[];
   const boniSet = new Set((ped.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
@@ -2923,7 +2923,7 @@ async function verDetalhesPedido(id) {
   }).join('');
 
   document.getElementById('modal-body').innerHTML = `
-    <h3>📋 Pedido de Venda — ${ped.cliente}</h3>
+    <h3>📋 Orçamento — ${ped.cliente}</h3>
     <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;font-size:12px;color:var(--gray-600)">
       ${ped.telefone?`<span>📱 ${ped.telefone}</span>`:''}
       ${ped.cpf?`<span>🪪 ${ped.cpf}</span>`:''}
@@ -2947,17 +2947,17 @@ async function verDetalhesPedido(id) {
     <p style="font-size:11px;color:var(--gray-400)">⚠️ Total estimado — pode variar se preços/estoque mudarem antes da finalização.</p>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Fechar</button>
-      <button class="btn btn-success" onclick="closeModal();confirmarFinalizarPedido('${id}')">✅ Finalizar Pedido</button>
+      <button class="btn btn-success" onclick="closeModal();confirmarFinalizarPedido('${id}')">✅ Finalizar Orçamento</button>
     </div>`;
   openModal();
 }
 
 function confirmarFinalizarPedido(id) {
   document.getElementById('modal-body').innerHTML = `
-    <h3>✅ Finalizar Pedido de Venda</h3>
+    <h3>✅ Finalizar Orçamento</h3>
     <p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">
       Ao finalizar, esta venda será <strong>registrada oficialmente</strong>: o estoque será deduzido,
-      parcelas (se houver) serão geradas, o cliente será sincronizado e o pedido será removido desta lista.
+      parcelas (se houver) serão geradas, o cliente será sincronizado e o orçamento será removido desta lista.
     </p>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
@@ -2969,10 +2969,10 @@ function confirmarFinalizarPedido(id) {
 
 async function executarFinalizacaoPedido(id) {
   const ped = (window._pedidosAll||[]).find(p=>p.id===id);
-  if (!ped) { showToast('Pedido não encontrado','error'); return; }
+  if (!ped) { showToast('Orçamento não encontrado','error'); return; }
 
   const sel = ped.itens_json||[];
-  if (!sel.length) { showToast('Pedido sem itens','error'); return; }
+  if (!sel.length) { showToast('Orçamento sem itens','error'); return; }
 
   const dados = {
     sel,
@@ -2996,15 +2996,15 @@ async function executarFinalizacaoPedido(id) {
   await sb.from('pedidos_venda').delete().eq('id', id);
   closeModal();
   showToast(dados.formaPgto==='Promissória'
-    ? `✅ Pedido finalizado! ${dados.numParcelas}x de R$ ${f(result.total/dados.numParcelas)}`
-    : '✅ Pedido finalizado e venda registrada!', 'success');
+    ? `✅ Orçamento finalizado! ${dados.numParcelas}x de R$ ${f(result.total/dados.numParcelas)}`
+    : '✅ Orçamento finalizado e venda registrada!', 'success');
   navigate('pedidos');
 }
 
 function excluirPedido(id, cliente) {
   document.getElementById('modal-body').innerHTML = `
-    <h3>🗑 Excluir Pedido</h3>
-    <p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">Deseja excluir o pedido de venda de <strong>${cliente}</strong>? Esta ação não pode ser desfeita.</p>
+    <h3>🗑 Excluir Orçamento</h3>
+    <p style="font-size:14px;color:var(--gray-600);margin-bottom:20px">Deseja excluir o orçamento de <strong>${cliente}</strong>? Esta ação não pode ser desfeita.</p>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-danger" id="del-pedido-btn">🗑 Excluir</button>
@@ -3012,16 +3012,16 @@ function excluirPedido(id, cliente) {
   document.getElementById('del-pedido-btn').addEventListener('click', async function(){
     await sb.from('pedidos_venda').delete().eq('id', id);
     closeModal();
-    showToast('Pedido excluído!','success');
+    showToast('Orçamento excluído!','success');
     navigate('pedidos');
   });
   openModal();
 }
 
-// ── EDITAR PEDIDO DE VENDA ──────────────────────────────────────
+// ── EDITAR ORÇAMENTO ──────────────────────────────────────
 function editarPedido(id) {
   const ped = (window._pedidosAll||[]).find(p=>p.id===id);
-  if (!ped) { showToast('Pedido não encontrado','error'); return; }
+  if (!ped) { showToast('Orçamento não encontrado','error'); return; }
   abrirModalEdicaoPedido(ped);
 }
 
@@ -3038,7 +3038,7 @@ async function abrirModalEdicaoPedido(ped) {
   const opcoesPgto = ['Dinheiro','PIX','Cartão','Promissória'];
 
   const html = [
-    '<h3>✏️ Editar Pedido de Venda</h3>',
+    '<h3>✏️ Editar Orçamento</h3>',
     '<div class="form-grid">',
       '<div class="form-group"><label>Nome do Cliente</label><input type="text" id="ep-cliente" value="' + (ped.cliente||'').replace(/"/g,'&quot;') + '"></div>',
       '<div class="form-group"><label>Telefone</label><input type="text" id="ep-tel" value="' + (ped.telefone||'') + '" oninput="formatarTelefone(this)"></div>',
@@ -3217,7 +3217,7 @@ async function salvarEdicaoPedido(id) {
   const { error } = await sb.from('pedidos_venda').update(dados).eq('id', id);
   if (error) { showToast('Erro ao salvar pedido: '+error.message,'error'); return; }
   closeModal();
-  showToast('📋 Pedido atualizado!','success');
+  showToast('📋 Orçamento atualizado!','success');
   navigate('pedidos');
 }
 
@@ -5759,3 +5759,4 @@ init();
 </script>
 </body>
 </html>
+  
