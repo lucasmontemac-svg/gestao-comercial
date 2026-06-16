@@ -1539,6 +1539,8 @@ async function renderVendas(c) {
     sb.from('vendas').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false}),
     sb.from('clientes').select('*').eq('user_id',currentUser.id),
   ]);
+  await padronizarTelefonesRegistros(vendas||[], 'vendas');
+  await padronizarTelefonesRegistros(clientesCad||[], 'clientes');
   window._produtosVenda = produtos||[]; // garante que está atualizado
   window._clientesCad = clientesCad||[];
   c.innerHTML = `
@@ -1552,7 +1554,7 @@ async function renderVendas(c) {
           onkeydown="if(event.key==='Escape')fecharSugestoesCliente()">
         <div id="v-cliente-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
-      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="v-tel" placeholder="(81) 9 9999-9999"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="v-tel" placeholder="(81) 9 9999-9999" oninput="formatarTelefone(this)"></div>
       <div class="form-group"><label>CPF</label><input type="text" id="v-cpf" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)"></div>
       <div class="form-group"><label>Meio de Contato</label>
         <select id="v-contato"><option>WhatsApp</option><option>Presencial</option><option>Instagram</option><option>Indicação</option></select>
@@ -2543,7 +2545,7 @@ function openEditVenda(id,cliente,tel,codigos,data,desc,total,status,obs) {
     '<h3>✏️ Editar Venda</h3>',
     '<div class="form-grid">',
       '<div class="form-group"><label>Nome do Cliente</label><input type="text" id="ev-cliente" value="' + (cliente||'').replace(/"/g,'&quot;') + '"></div>',
-      '<div class="form-group"><label>Telefone</label><input type="text" id="ev-tel" value="' + (tel||'') + '"></div>',
+      '<div class="form-group"><label>Telefone</label><input type="text" id="ev-tel" value="' + (tel||'') + '" oninput="formatarTelefone(this)"></div>',
       '<div class="form-group" style="position:relative;grid-column:1/-1">',
         '<label>Buscar Produto (código ou nome)</label>',
         '<input type="text" id="ev-busca" style="width:100%" placeholder="Digite código ou nome..." oninput="buscarProdutoEdicao(this.value)" autocomplete="off">',
@@ -2845,10 +2847,12 @@ async function salvarPedidoVenda() {
 async function renderPedidos(c) {
   const [{ data: pedidos }, { data: produtos }] = await Promise.all([
     sb.from('pedidos_venda').select('*').eq('user_id', currentUser.id).order('created_at',{ascending:false}),
-    sb.from('produtos').select('codigo,nome').eq('user_id', currentUser.id),
+    sb.from('produtos').select('codigo,nome,venda,custo,bonificacao,categoria,estoque,estoque_bonificacao,tipo').eq('user_id', currentUser.id),
   ]);
+  await padronizarTelefonesRegistros(pedidos||[], 'pedidos_venda');
   window._pedidosAll = pedidos||[];
   window._pedidosProdutos = produtos||[];
+  if (!window._produtosVenda || !window._produtosVenda.length) window._produtosVenda = produtos||[];
 
   c.innerHTML = `
   <div class="form-card" style="margin-bottom:16px;padding:14px 16px;background:rgba(46,123,250,.06);border:1px solid rgba(46,123,250,.15)">
@@ -2891,6 +2895,7 @@ function renderPedidosRows(pedidos, produtos) {
       <td><span class="badge badge-blue">${ped.forma_pagamento||'—'}</span></td>
       <td style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="verDetalhesPedido('${ped.id}')" title="Ver detalhes">👁</button>
+        <button class="btn btn-sm btn-outline" onclick="editarPedido('${ped.id}')" title="Editar pedido">✏️</button>
         <button class="btn btn-sm btn-success" onclick="confirmarFinalizarPedido('${ped.id}')" title="Finalizar e registrar como venda">✅ Finalizar</button>
         <button class="btn btn-sm btn-danger" onclick="excluirPedido('${ped.id}','${nomeEsc}')" title="Excluir pedido">🗑</button>
       </td>
@@ -3013,6 +3018,209 @@ function excluirPedido(id, cliente) {
   openModal();
 }
 
+// ── EDITAR PEDIDO DE VENDA ──────────────────────────────────────
+function editarPedido(id) {
+  const ped = (window._pedidosAll||[]).find(p=>p.id===id);
+  if (!ped) { showToast('Pedido não encontrado','error'); return; }
+  abrirModalEdicaoPedido(ped);
+}
+
+async function abrirModalEdicaoPedido(ped) {
+  // Garante a lista de produtos com preço de venda (necessária para recalcular o total)
+  if (!window._produtosVenda || !window._produtosVenda.length) {
+    const { data: produtos } = await sb.from('produtos')
+      .select('codigo,nome,venda,custo,bonificacao,categoria,estoque,estoque_bonificacao,tipo')
+      .eq('user_id', currentUser.id);
+    window._produtosVenda = produtos||[];
+  }
+
+  const opcoesContato = ['WhatsApp','Presencial','Instagram','Indicação'];
+  const opcoesPgto = ['Dinheiro','PIX','Cartão','Promissória'];
+
+  const html = [
+    '<h3>✏️ Editar Pedido de Venda</h3>',
+    '<div class="form-grid">',
+      '<div class="form-group"><label>Nome do Cliente</label><input type="text" id="ep-cliente" value="' + (ped.cliente||'').replace(/"/g,'&quot;') + '"></div>',
+      '<div class="form-group"><label>Telefone</label><input type="text" id="ep-tel" value="' + (ped.telefone||'') + '" oninput="formatarTelefone(this)"></div>',
+      '<div class="form-group"><label>CPF</label><input type="text" id="ep-cpf" value="' + (ped.cpf||'') + '" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)"></div>',
+      '<div class="form-group"><label>Meio de Contato</label><select id="ep-contato">' +
+        opcoesContato.map(function(o){return '<option' + (ped.contato===o?' selected':'') + '>' + o + '</option>';}).join('') +
+      '</select></div>',
+      '<div class="form-group" style="position:relative;grid-column:1/-1">',
+        '<label>Buscar Produto (código ou nome)</label>',
+        '<input type="text" id="ep-busca" style="width:100%" placeholder="Digite código ou nome..." oninput="buscarProdutoEdicaoPedido(this.value)" autocomplete="off">',
+        '<div id="ep-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);z-index:50;max-height:200px;overflow-y:auto;margin-top:2px"></div>',
+      '</div>',
+      '<div id="ep-selecionados" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;min-height:10px"></div>',
+      '<input type="hidden" id="ep-codigos" value="' + (ped.codigos||'') + '">',
+      '<div class="form-group"><label>Data</label><input type="date" id="ep-data" value="' + (ped.data_venda||'') + '"></div>',
+      '<div class="form-group"><label>Desconto %</label><input type="number" id="ep-desc" value="' + (ped.desconto||0) + '" oninput="calcTotalEdicaoPedido()"></div>',
+      '<div class="form-group"><label>Forma de Pagamento</label><select id="ep-forma-pgto" onchange="toggleTaxaMaquinetaPedido();calcTotalEdicaoPedido()">' +
+        opcoesPgto.map(function(o){return '<option' + (ped.forma_pagamento===o?' selected':'') + '>' + o + '</option>';}).join('') +
+      '</select></div>',
+      '<div class="form-group" id="ep-taxa-group" style="display:' + (ped.forma_pagamento==='Cartão'?'block':'none') + '"><label>Taxa Maquineta %</label><input type="number" id="ep-taxa-maquineta" value="' + (ped.taxa_maquineta||0) + '" oninput="calcTotalEdicaoPedido()"></div>',
+      '<div class="form-group"><label>Total Estimado (R$)</label><input type="number" id="ep-total" value="' + (ped.total_estimado||0) + '"></div>',
+      '<div class="form-group"><label>Status</label><select id="ep-status">',
+        '<option value="pago"' + (ped.status==='pago'?' selected':'') + '>✅ Pago</option>',
+        '<option value="pendente"' + (ped.status==='pendente'?' selected':'') + '>⏳ Pendente</option>',
+      '</select></div>',
+      '<div class="form-group" style="grid-column:1/-1"><label>Observação</label><input type="text" id="ep-obs" value="' + (ped.observacao||'').replace(/"/g,'&quot;') + '" placeholder="Ex: entrega agendada..."></div>',
+    '</div>',
+    '<div class="modal-footer">',
+      '<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>',
+      '<button class="btn btn-success" id="ep-save-btn">💾 Salvar</button>',
+    '</div>'
+  ].join('');
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('ep-save-btn').addEventListener('click', function(){ salvarEdicaoPedido(ped.id); });
+  openModal();
+
+  // Inicializa a lista de produtos selecionados a partir dos códigos já salvos no pedido
+  window._edicaoPedidoSelecionados = [];
+  const codigos = ped.codigos||'';
+  if (codigos) {
+    const prods = window._produtosVenda||[];
+    const boniSet = new Set((ped.itens_bonificacao||'').split(',').map(function(s){return s.trim().toUpperCase();}).filter(Boolean));
+    const codes = codigos.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    codes.forEach(function(c) {
+      const p = prods.find(function(x){return x.codigo===c;});
+      if (!p) return;
+      const exist = window._edicaoPedidoSelecionados.find(function(x){return x.codigo===c;});
+      if (exist) exist.qty = (exist.qty||1)+1;
+      else window._edicaoPedidoSelecionados.push(Object.assign({},p,{qty:1,_isBoni:boniSet.has(c.toUpperCase())}));
+    });
+    atualizarTagsEdicaoPedidoQty();
+    calcTotalEdicaoPedido();
+  }
+}
+
+function toggleTaxaMaquinetaPedido() {
+  const forma = document.getElementById('ep-forma-pgto')?.value;
+  const grp = document.getElementById('ep-taxa-group');
+  if (grp) grp.style.display = forma==='Cartão' ? 'block' : 'none';
+}
+
+function buscarProdutoEdicaoPedido(termo) {
+  const prods = window._produtosVenda||[];
+  const sug = document.getElementById('ep-sugestoes');
+  if (!sug || !termo.trim()) { if(sug) sug.style.display='none'; return; }
+  const busca = termo.trim().toLowerCase();
+  const encontrados = prods.filter(p =>
+    (p.codigo||'').toLowerCase().includes(busca) || (p.nome||'').toLowerCase().includes(busca)
+  );
+  if (!encontrados.length) { sug.style.display='none'; return; }
+  sug.innerHTML = encontrados.map(p=>`
+    <div onclick="selecionarProdEdicaoPedido('${p.codigo}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;font-size:13px"
+      onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">
+      <span><strong style="color:var(--blue)">${p.codigo}</strong> <span style="margin-left:8px">${p.nome}</span></span>
+      <span style="color:var(--green-dim);font-weight:600">R$ ${f(p.venda)}</span>
+    </div>`).join('');
+  sug.style.display='block';
+}
+
+function selecionarProdEdicaoPedido(codigo) {
+  const prods = window._produtosVenda||[];
+  const p = prods.find(x=>x.codigo===codigo);
+  if (!p) return;
+  if (!window._edicaoPedidoSelecionados) window._edicaoPedidoSelecionados = [];
+  const exist = window._edicaoPedidoSelecionados.find(x=>x.codigo===codigo);
+  if (exist) exist.qty = (exist.qty||1) + 1;
+  else window._edicaoPedidoSelecionados.push(Object.assign({}, p, {qty:1}));
+  document.getElementById('ep-busca').value = '';
+  document.getElementById('ep-sugestoes').style.display = 'none';
+  sincronizarEdicaoPedidoHidden();
+  atualizarTagsEdicaoPedidoQty();
+  calcTotalEdicaoPedido();
+}
+
+function sincronizarEdicaoPedidoHidden() {
+  const sel = window._edicaoPedidoSelecionados||[];
+  const hiddenInput = document.getElementById('ep-codigos');
+  if (hiddenInput) hiddenInput.value = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
+}
+
+function atualizarQtyEdicaoPedido(codigo, val) {
+  const p = (window._edicaoPedidoSelecionados||[]).find(x=>x.codigo===codigo);
+  if (p) { p.qty = Math.max(1, parseInt(val)||1); sincronizarEdicaoPedidoHidden(); calcTotalEdicaoPedido(); }
+}
+
+function atualizarTagsEdicaoPedidoQty() {
+  const sel = window._edicaoPedidoSelecionados||[];
+  const selDiv = document.getElementById('ep-selecionados');
+  if (!selDiv) return;
+  selDiv.innerHTML = sel.map(function(p) {
+    const subtProd = p._isBoni ? 0 : Number(p.venda) * (p.qty||1);
+    return '<div style="display:inline-flex;align-items:center;gap:6px;background:#1A3A5C;border-radius:10px;padding:6px 10px;margin:2px;font-size:12px">'
+      + '<span style="color:white;font-weight:600">' + p.codigo + ' — ' + p.nome + (p._isBoni?' 🎁':'') + '</span>'
+      + '<span style="color:rgba(255,255,255,.6);font-size:11px">R$ ' + f(p.venda) + ' un.</span>'
+      + '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);border-radius:6px;padding:2px 6px">'
+      + '<span style="color:rgba(255,255,255,.6);font-size:10px">Qtd:</span>'
+      + '<input type="number" value="' + (p.qty||1) + '" min="1" '
+      + 'style="width:40px;background:transparent;border:none;color:white;font-size:12px;font-weight:700;text-align:center;outline:none" '
+      + 'onchange="atualizarQtyEdicaoPedido(\'' + p.codigo + '\',this.value)">'
+      + '</div>'
+      + '<span style="color:#22C55E;font-size:11px;font-weight:600">= R$ ' + f(subtProd) + '</span>'
+      + '<span onclick="removerProdEdicaoPedido(\'' + p.codigo + '\')" '
+      + 'style="color:rgba(255,255,255,.5);cursor:pointer;font-size:16px;line-height:1;padding:0 2px">×</span>'
+      + '</div>';
+  }).join('');
+}
+
+function calcTotalEdicaoPedido() {
+  const sel = window._edicaoPedidoSelecionados||[];
+  const totalInput = document.getElementById('ep-total');
+  const descInput = document.getElementById('ep-desc');
+  const formaInput = document.getElementById('ep-forma-pgto');
+  const taxaInput = document.getElementById('ep-taxa-maquineta');
+  if (!totalInput) return;
+  const desc = parseFloat(descInput?.value)||0;
+  const subtotal = sel.reduce(function(a,p){ return a + (p._isBoni?0:Number(p.venda)*(p.qty||1)); },0);
+  let total = subtotal*(1-desc/100);
+  if (formaInput?.value==='Cartão') total = total*(1-(parseFloat(taxaInput?.value)||0)/100);
+  totalInput.value = total.toFixed(2);
+}
+
+function removerProdEdicaoPedido(codigo) {
+  window._edicaoPedidoSelecionados = (window._edicaoPedidoSelecionados||[]).filter(function(p){return p.codigo!==codigo;});
+  sincronizarEdicaoPedidoHidden();
+  atualizarTagsEdicaoPedidoQty();
+  calcTotalEdicaoPedido();
+}
+
+async function salvarEdicaoPedido(id) {
+  const sel = window._edicaoPedidoSelecionados||[];
+  if (!sel.length) { showToast('Selecione ao menos um produto','error'); return; }
+  const cliente = document.getElementById('ep-cliente').value.trim();
+  if (!cliente) { showToast('Informe o nome do cliente','error'); return; }
+
+  const formaPgto = document.getElementById('ep-forma-pgto').value;
+  const itensBoni = sel.filter(p=>p._isBoni).map(p=>p.codigo);
+
+  const dados = {
+    cliente,
+    telefone: document.getElementById('ep-tel').value.trim(),
+    cpf: document.getElementById('ep-cpf').value.trim(),
+    contato: document.getElementById('ep-contato').value,
+    codigos: document.getElementById('ep-codigos').value.trim().toUpperCase(),
+    itens_bonificacao: itensBoni.join(','),
+    data_venda: document.getElementById('ep-data').value,
+    desconto: parseFloat(document.getElementById('ep-desc').value)||0,
+    forma_pagamento: formaPgto,
+    taxa_maquineta: formaPgto==='Cartão' ? (parseFloat(document.getElementById('ep-taxa-maquineta')?.value)||0) : 0,
+    total_estimado: parseFloat(document.getElementById('ep-total').value)||0,
+    status: document.getElementById('ep-status').value,
+    observacao: document.getElementById('ep-obs')?.value.trim()||'',
+    itens_json: sel,
+  };
+
+  const { error } = await sb.from('pedidos_venda').update(dados).eq('id', id);
+  if (error) { showToast('Erro ao salvar pedido: '+error.message,'error'); return; }
+  closeModal();
+  showToast('📋 Pedido atualizado!','success');
+  navigate('pedidos');
+}
+
 
 function formatarCPF(input) {
   let v = input.value.replace(/\D/g,'').slice(0,11);
@@ -3037,6 +3245,44 @@ function formatarCEP(input) {
   let v = input.value.replace(/\D/g,'').slice(0,8);
   if (v.length > 5) v = v.slice(0,5) + '-' + v.slice(5);
   input.value = v;
+}
+
+// Aplica a máscara (XX) 9 XXXX-XXXX em tempo real enquanto o usuário digita o telefone.
+function formatarTelefone(input) {
+  let v = input.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 7) v = v.slice(0,7) + '-' + v.slice(7);
+  if (v.length > 3) v = v.slice(0,3) + ' ' + v.slice(3);
+  if (v.length > 2) v = v.slice(0,2) + ') ' + v.slice(2);
+  if (v.length > 0) v = '(' + v;
+  input.value = v;
+}
+
+// Converte qualquer telefone já salvo (com ou sem DDD, com ou sem o "9", com +55, etc.)
+// para o padrão único (XX) 9 XXXX-XXXX. Usa DDD 81 como padrão quando o número não tiver DDD.
+function padronizarTelefoneStr(raw) {
+  let d = (raw||'').replace(/\D/g,'');
+  if (!d) return '';
+  if (d.length > 11 && d.slice(0,2) === '55') d = d.slice(2);
+  if (d.length > 11) d = d.slice(-11);
+  if (d.length === 8) d = '81' + '9' + d;
+  else if (d.length === 9) d = '81' + d;
+  else if (d.length === 10) d = d.slice(0,2) + '9' + d.slice(2);
+  if (d.length !== 11) return raw||''; // formato muito diferente do esperado: mantém original
+  return '(' + d.slice(0,2) + ') ' + d.slice(2,3) + ' ' + d.slice(3,7) + '-' + d.slice(7,11);
+}
+
+// Percorre uma lista de registros (clientes, vendas ou pedidos_venda) já carregada do banco
+// e padroniza o campo telefone para (XX) 9 XXXX-XXXX, salvando a correção de volta no Supabase
+// quando o valor armazenado ainda estiver em um formato diferente.
+async function padronizarTelefonesRegistros(registros, tabela) {
+  for (const reg of registros) {
+    if (!reg || !reg.telefone) continue;
+    const novo = padronizarTelefoneStr(reg.telefone);
+    if (novo && novo !== reg.telefone) {
+      reg.telefone = novo;
+      try { await sb.from(tabela).update({ telefone: novo }).eq('id', reg.id); } catch (e) { /* segue sem travar a tela */ }
+    }
+  }
 }
 
 async function buscarCEPCliente(cep, prefix) {
@@ -3068,6 +3314,7 @@ async function renderClientes(c) {
     sb.from('clientes').select('*').eq('user_id', currentUser.id).order('nome'),
     sb.from('vendas').select('cliente,total,status,data_venda').eq('user_id', currentUser.id),
   ]);
+  await padronizarTelefonesRegistros(clientes||[], 'clientes');
 
   window._clientesAll = clientes||[];
   window._clientesVendas = vendas||[];
@@ -3077,7 +3324,7 @@ async function renderClientes(c) {
     <div class="section-title">+ Cadastrar Cliente</div>
     <div class="form-grid">
       <div class="form-group"><label>Nome Completo</label><input type="text" id="cl-nome" placeholder="Nome do cliente"></div>
-      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="cl-tel" placeholder="(00) 00000-0000"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="cl-tel" placeholder="(81) 9 9999-9999" oninput="formatarTelefone(this)"></div>
       <div class="form-group"><label>CPF</label><input type="text" id="cl-cpf" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)"></div>
       <div class="form-group"><label>E-mail</label><input type="email" id="cl-email" placeholder="email@exemplo.com"></div>
       <div class="form-group">
@@ -3257,7 +3504,7 @@ function openEditCliente(cl) {
     <h3>✏️ Editar Cliente</h3>
     <div class="form-grid">
       <div class="form-group"><label>Nome Completo</label><input type="text" id="ecl-nome" value="${(cl.nome||'').replace(/"/g,'&quot;')}"></div>
-      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="ecl-tel" value="${cl.telefone||''}"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input type="text" id="ecl-tel" value="${cl.telefone||''}" oninput="formatarTelefone(this)"></div>
       <div class="form-group"><label>CPF</label><input type="text" id="ecl-cpf" value="${cl.cpf||''}" placeholder="000.000.000-00" maxlength="14" oninput="formatarCPF(this)"></div>
       <div class="form-group"><label>E-mail</label><input type="email" id="ecl-email" value="${cl.email||''}"></div>
       <div class="form-group">
@@ -3320,6 +3567,7 @@ async function renderResumo(c) {
     sb.from('produtos').select('*').eq('user_id', currentUser.id),
     sb.from('despesas').select('*').eq('user_id', currentUser.id),
   ]);
+  await padronizarTelefonesRegistros(vendas||[], 'vendas');
 
   window._resumoVendas   = vendas||[];
   window._resumoProdutos = produtos||[];
