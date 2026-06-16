@@ -1972,6 +1972,113 @@ function gerarPedidoPDF(id) {
   showToast('Pedido em PDF gerado!','success');
 }
 
+function gerarOrcamentoPDF(id) {
+  const ped = (window._pedidosAll||[]).find(p=>p.id===id);
+  if (!ped) { showToast('Orçamento não encontrado','error'); return; }
+
+  const itensRaw = ped.itens_json||[];
+  const boniSet = new Set((ped.itens_bonificacao||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+
+  const itens = itensRaw.map(p => {
+    const isBoni = boniSet.has((p.codigo||'').toUpperCase()) || p.bonificacao || p._isBoni || false;
+    const qty = p.qty||1;
+    const valorUnit = isBoni ? 0 : (Number(p.venda)||0);
+    return { nome: p.nome||p.codigo||'—', qty, valorUnit, subtotal: valorUnit*qty, isBoni };
+  });
+
+  // No orçamento (documento do cliente), mostramos o valor BRUTO — antes de
+  // qualquer taxa de maquineta, que é um custo interno do vendedor
+  const subtotalBruto = itens.reduce((a,i)=>a+(i.isBoni?0:i.subtotal),0);
+  const descPct = Number(ped.desconto)||0;
+  const totalBruto = subtotalBruto * (1 - descPct/100);
+  const valorDesconto = subtotalBruto - totalBruto;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const lojaNome = (currentProfile&&currentProfile.loja) ? currentProfile.loja : (currentProfile&&currentProfile.name) ? currentProfile.name : 'Gestão Comercial Pro';
+
+  // Header
+  doc.setFillColor(15,28,46);
+  doc.rect(0,0,210,28,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text(lojaNome.toUpperCase(), 14, 13);
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text('ORÇAMENTO', 14, 21);
+
+  doc.setFontSize(9);
+  const dataFmt = ped.data_venda ? ped.data_venda.split('-').reverse().join('/') : '—';
+  doc.text('Data: ' + dataFmt, 196, 13, {align:'right'});
+  doc.text('Pagamento: ' + (ped.forma_pagamento||'—'), 196, 21, {align:'right'});
+
+  // Dados do cliente
+  let y = 38;
+  doc.setTextColor(30,41,59);
+  doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text('DADOS DO CLIENTE', 14, y); y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text('Cliente: ' + (ped.cliente||'—'), 14, y); y+=5;
+  if (ped.telefone) { doc.text('Telefone: ' + ped.telefone, 14, y); y+=5; }
+  if (ped.contato)  { doc.text('Contato via: ' + ped.contato, 14, y); y+=5; }
+  y += 4;
+
+  // Tabela de produtos
+  doc.autoTable({
+    startY:y, margin:{left:14,right:14},
+    head:[['Produto','Qtd','Valor Unit.','Subtotal']],
+    body: itens.map(i => [
+      i.nome + (i.isBoni?'  🎁 BONIFICAÇÃO':''),
+      i.qty.toString(),
+      i.isBoni ? 'R$ 0,00' : 'R$ ' + f(i.valorUnit),
+      i.isBoni ? 'R$ 0,00' : 'R$ ' + f(i.subtotal),
+    ]),
+    styles:{fontSize:10, cellPadding:4},
+    headStyles:{fillColor:[46,117,182], textColor:255, fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[248,250,252]},
+    columnStyles:{
+      0:{cellWidth:90}, 1:{cellWidth:20,halign:'center'},
+      2:{cellWidth:35,halign:'right'}, 3:{cellWidth:37,halign:'right'}
+    },
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+
+  // Totais
+  const boxW = 75;
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  if (descPct > 0) {
+    doc.text('Subtotal:', 196-boxW, y); doc.text('R$ ' + f(subtotalBruto), 196, y, {align:'right'}); y+=6;
+    doc.text('Desconto (' + descPct.toFixed(1) + '%):', 196-boxW, y); doc.text('- R$ ' + f(Math.max(0,valorDesconto)), 196, y, {align:'right'}); y+=6;
+  }
+  doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.setDrawColor(46,117,182);
+  doc.line(196-boxW, y-2, 196, y-2);
+  doc.text('TOTAL:', 196-boxW, y+4); doc.text('R$ ' + f(totalBruto), 196, y+4, {align:'right'});
+  y += 14;
+
+  // Observação
+  if (ped.observacao) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text('Observação:', 14, y); y+=5;
+    doc.setFont('helvetica','normal');
+    doc.text(doc.splitTextToSize(ped.observacao, 180), 14, y);
+    y += 10;
+  }
+
+  // Aviso de validade do orçamento
+  doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(120);
+  doc.text('Este documento é um orçamento e não constitui comprovante de venda. Valores sujeitos a confirmação de estoque e preços.', 14, y, {maxWidth:182});
+  y += 10;
+
+  // Footer
+  doc.setFontSize(8); doc.setTextColor(150);
+  doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR').slice(0,5) + ' — ' + lojaNome, 14, 285);
+
+  const nomeArq = 'orcamento_' + (ped.cliente||'cliente').replace(/[^a-zA-Z0-9]/g,'_') + '_' + (ped.data_venda||'');
+  doc.save(nomeArq + '.pdf');
+  showToast('🧾 Orçamento em PDF gerado!','success');
+}
+
 function filtrarVendas(termo) {
   const rows = document.querySelectorAll('#tbody-vendas tr[data-cliente]');
   const t = termo.toLowerCase();
@@ -2944,6 +3051,7 @@ function renderPedidosRows(pedidos, produtos) {
       <td><span class="badge badge-blue">${ped.forma_pagamento||'—'}</span></td>
       <td style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="verDetalhesPedido('${ped.id}')" title="Ver detalhes">👁</button>
+        <button class="btn btn-sm btn-outline" title="Gerar orçamento em PDF" onclick="gerarOrcamentoPDF('${ped.id}')">🧾</button>
         <button class="btn btn-sm btn-outline" onclick="editarPedido('${ped.id}')" title="Editar orçamento">✏️</button>
         <button class="btn btn-sm btn-success" onclick="confirmarFinalizarPedido('${ped.id}')" title="Finalizar e registrar como venda">✅ Finalizar</button>
         <button class="btn btn-sm btn-danger" onclick="excluirPedido('${ped.id}','${nomeEsc}')" title="Excluir orçamento">🗑</button>
@@ -2996,6 +3104,7 @@ async function verDetalhesPedido(id) {
     <p style="font-size:11px;color:var(--gray-400)">⚠️ Total estimado — pode variar se preços/estoque mudarem antes da finalização.</p>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Fechar</button>
+      <button class="btn btn-outline" onclick="gerarOrcamentoPDF('${id}')">🧾 Gerar PDF</button>
       <button class="btn btn-success" onclick="closeModal();confirmarFinalizarPedido('${id}')">✅ Finalizar Orçamento</button>
     </div>`;
   openModal();
