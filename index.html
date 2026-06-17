@@ -695,11 +695,15 @@ async function renderDashboard(c) {
   },0);
 
   // ── Despesas do mês (filtra por vencimento dentro do mês atual) ──
+  // Despesas marcadas como "compra de mercadoria/fornecedor" são excluídas daqui:
+  // o custo dessa mercadoria já está embutido no CMV calculado acima, então somar
+  // o boleto de novo aqui contaria o mesmo custo duas vezes no Lucro Líquido.
   const mesAtualStr = inicioMes.substring(0,7); // 'YYYY-MM'
-  const despesasMes = todasDespesas.filter(d => (d.vencimento||'').substring(0,7) === mesAtualStr);
+  const despesasOperacionais = todasDespesas.filter(d => !d.eh_compra_mercadoria);
+  const despesasMes = despesasOperacionais.filter(d => (d.vencimento||'').substring(0,7) === mesAtualStr);
   const despMes = despesasMes.length > 0
     ? despesasMes.reduce((a,d)=>a+Number(d.valor),0)
-    : todasDespesas.reduce((a,d)=>a+Number(d.valor),0); // fallback: se nenhuma despesa tem vencimento no mês, usa total
+    : despesasOperacionais.reduce((a,d)=>a+Number(d.valor),0); // fallback: se nenhuma despesa tem vencimento no mês, usa total
   const lucroLiq = receitaMes - cmv - despMes;
   const pontoEq  = despMes > 0 && receitaMes > cmv ? despMes / (1 - (cmv/Math.max(receitaMes,1))) : 0;
   const percDesp = receitaMes > 0 ? (despMes/receitaMes*100) : 0;
@@ -3949,7 +3953,9 @@ function aplicarFiltrosResumo() {
   const [de, ate] = getPeriodoDates(periodo);
   const todas = window._resumoVendas||[];
   const prods = window._resumoProdutos||[];
-  const desps = window._resumoDespesas||[];
+  // Despesas que são compra de mercadoria/fornecedor já têm seu custo contado no CMV
+  // (calculado a partir do estoque); contá-las de novo aqui duplicaria esse custo no Lucro Líquido.
+  const desps = (window._resumoDespesas||[]).filter(d => !d.eh_compra_mercadoria);
 
   // Filtra vendas por período e status
   let vendas = todas.filter(v => {
@@ -4415,7 +4421,7 @@ async function exportarExcel() {
       sb.from('despesas').select('*').eq('user_id', currentUser.id),
     ]);
     window._resumoVendas = v||[]; window._resumoProdutos = p||[]; window._resumoDespesas = d||[];
-    window._filteredVendas = v||[]; window._filteredDesps = d||[];
+    window._filteredVendas = v||[]; window._filteredDesps = (d||[]).filter(x=>!x.eh_compra_mercadoria);
     window._filteredReceita = (v||[]).reduce((a,x)=>a+Number(x.total),0);
     window._filteredCusto = 0;
   }
@@ -4516,7 +4522,7 @@ async function exportarPDF() {
     window._resumoProdutos = p||[];
     window._resumoDespesas = d||[];
     window._filteredVendas  = v||[];
-    window._filteredDesps   = d||[];
+    window._filteredDesps   = (d||[]).filter(x=>!x.eh_compra_mercadoria);
     window._filteredReceita = (v||[]).reduce((a,x)=>a+Number(x.total),0);
     window._filteredCusto   = 0;
   }
@@ -5023,6 +5029,13 @@ async function renderDespesas(c) {
         </select>
       </div>
     </div>
+    <div style="margin-top:14px;background:rgba(46,123,250,.06);border:1px solid rgba(46,123,250,.2);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+      <input type="checkbox" id="d-mercadoria" style="width:16px;height:16px;accent-color:var(--blue)">
+      <div>
+        <label for="d-mercadoria" style="font-size:12px;font-weight:600;color:var(--blue);cursor:pointer">📦 Esta despesa é compra de mercadoria/fornecedor (boleto de produtos para revenda)</label>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">Continua aparecendo aqui em Despesas, mas não entra no cálculo de Lucro Líquido — o custo dessa mercadoria já é contado automaticamente pelo CMV quando ela é vendida, e somar aqui de novo duplicaria o custo.</div>
+      </div>
+    </div>
     <div style="margin-top:16px"><button class="btn btn-primary" onclick="salvarDespesa()">+ Adicionar Despesa</button></div>
   </div>`;
 
@@ -5149,6 +5162,7 @@ function renderDespLista(despesas) {
       return `<tr style="border-bottom:1px solid var(--gray-100)${vencAlert?';background:rgba(239,68,68,.04)':''}">
         <td style="padding:10px 12px;font-size:13px">
           <strong>${d.descricao}</strong>
+          ${d.eh_compra_mercadoria?'<span style="margin-left:6px;font-size:10px;background:#EFF6FF;color:var(--blue);padding:2px 6px;border-radius:10px" title="Não entra no cálculo de Lucro Líquido — custo já contado pelo CMV">📦 Mercadoria</span>':''}
           ${vencAlert?'<span style="margin-left:6px;font-size:10px;background:#FEE2E2;color:var(--red);padding:2px 6px;border-radius:10px">⚠️ Vence em breve</span>':''}
         </td>
         <td style="padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:var(--red)">R$ ${f(d.valor)}</td>
@@ -5160,7 +5174,7 @@ function renderDespLista(despesas) {
         <td style="padding:10px 12px">
           <div style="display:flex;gap:4px;justify-content:center">
             <button class="btn btn-sm btn-outline" onclick="toggleDespesa('${d.id}','${d.status}')">${d.status==='pago'?'↩':'✅'}</button>
-            <button class="btn btn-sm btn-outline" onclick="openEditDespesa('${d.id}','${d.descricao}',${d.valor},'${d.vencimento||''}','${d.categoria}','${d.status}')">✏️</button>
+            <button class="btn btn-sm btn-outline" onclick="openEditDespesa('${d.id}','${d.descricao}',${d.valor},'${d.vencimento||''}','${d.categoria}','${d.status}',${d.eh_compra_mercadoria?'true':'false'})">✏️</button>
             <button class="btn btn-sm btn-danger" onclick="excluirDespesa('${d.id}','${d.descricao}')">🗑</button>
           </div>
         </td>
@@ -5528,7 +5542,7 @@ async function exportarDespesasPDF() {
 
 
 async function salvarDespesa() {
-  const dados={user_id:currentUser.id,descricao:document.getElementById('d-desc').value.trim(),valor:parseFloat(document.getElementById('d-val').value)||0,vencimento:document.getElementById('d-venc').value,categoria:document.getElementById('d-cat').value};
+  const dados={user_id:currentUser.id,descricao:document.getElementById('d-desc').value.trim(),valor:parseFloat(document.getElementById('d-val').value)||0,vencimento:document.getElementById('d-venc').value,categoria:document.getElementById('d-cat').value,eh_compra_mercadoria:document.getElementById('d-mercadoria')?.checked||false};
   if(!dados.descricao){showToast('Informe a descrição','error');return;}
   await sb.from('despesas').insert(dados);
   showToast('Despesa registrada!','success');
@@ -5617,6 +5631,13 @@ function abrirRevisaoImportXml(itens) {
         <option value="Eventual">Eventual</option>
       </select>
     </div>
+    <div style="margin-top:10px;background:rgba(46,123,250,.06);border:1px solid rgba(46,123,250,.2);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+      <input type="checkbox" id="ximp-mercadoria" checked style="width:16px;height:16px;accent-color:var(--blue)">
+      <div>
+        <label for="ximp-mercadoria" style="font-size:12px;font-weight:600;color:var(--blue);cursor:pointer">📦 Tratar como compra de mercadoria/fornecedor</label>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">Boletos de NF-e geralmente são pagamento de mercadoria para revenda. Marcado, eles não entram no cálculo de Lucro Líquido (o custo já é contado pelo CMV).</div>
+      </div>
+    </div>
     <div style="max-height:300px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;margin-top:10px">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="background:var(--gray-50)">
@@ -5646,6 +5667,7 @@ function abrirRevisaoImportXml(itens) {
 async function confirmarImportXml() {
   const itens = window._xmlImportItens||[];
   const categoria = document.getElementById('ximp-categoria').value;
+  const ehMercadoria = document.getElementById('ximp-mercadoria')?.checked||false;
   const selecionados = Array.from(document.querySelectorAll('.ximp-chk'))
     .filter(c => c.checked)
     .map(c => itens[parseInt(c.dataset.idx,10)]);
@@ -5659,6 +5681,7 @@ async function confirmarImportXml() {
     vencimento: it.vencimento,
     categoria,
     status: 'pendente',
+    eh_compra_mercadoria: ehMercadoria,
   }));
 
   const { error } = await sb.from('despesas').insert(linhas);
@@ -5674,7 +5697,7 @@ async function toggleDespesa(id, status) {
   navigate('despesas');
 }
 
-function openEditDespesa(id, descricao, valor, vencimento, categoria, status) {
+function openEditDespesa(id, descricao, valor, vencimento, categoria, status, ehMercadoria) {
   document.getElementById('modal-body').innerHTML = [
     '<h3>✏️ Editar Despesa</h3>',
     '<div class="form-grid">',
@@ -5695,6 +5718,13 @@ function openEditDespesa(id, descricao, valor, vencimento, categoria, status) {
         '</select>',
       '</div>',
     '</div>',
+    '<div style="margin-top:12px;background:rgba(46,123,250,.06);border:1px solid rgba(46,123,250,.2);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px">',
+      '<input type="checkbox" id="ed-mercadoria" ' + (ehMercadoria?'checked':'') + ' style="width:16px;height:16px;accent-color:var(--blue)">',
+      '<div>',
+        '<label for="ed-mercadoria" style="font-size:12px;font-weight:600;color:var(--blue);cursor:pointer">📦 Compra de mercadoria/fornecedor</label>',
+        '<div style="font-size:11px;color:var(--gray-400);margin-top:2px">Não entra no cálculo de Lucro Líquido (o custo já é contado pelo CMV).</div>',
+      '</div>',
+    '</div>',
     '<div class="modal-footer">',
       '<button class="btn btn-outline" onclick="closeModal()">Cancelar</button>',
       '<button class="btn btn-success" id="ed-save-btn">💾 Salvar</button>',
@@ -5711,6 +5741,7 @@ async function salvarEdicaoDespesa(id) {
     vencimento: document.getElementById('ed-venc').value||null,
     categoria:  document.getElementById('ed-cat').value,
     status:     document.getElementById('ed-status').value,
+    eh_compra_mercadoria: document.getElementById('ed-mercadoria')?.checked||false,
   };
   if (!dados.descricao) { showToast('Informe a descrição','error'); return; }
   const { error } = await sb.from('despesas').update(dados).eq('id', id);
