@@ -5013,6 +5013,12 @@ async function renderDespesas(c) {
         <option value="pago">✅ Pago</option>
         <option value="pendente">⏳ Pendente</option>
       </select>
+      <select id="df-mercadoria" onchange="aplicarFiltrosDespesas()"
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:8px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
+        <option value="">📦 Mercadoria: todas</option>
+        <option value="sim">📦 Só compra de mercadoria/fornecedor</option>
+        <option value="nao">🏠 Só demais despesas (não mercadoria)</option>
+      </select>
       <div style="display:flex;gap:6px;margin-left:auto">
         <button class="btn btn-outline btn-sm" onclick="document.getElementById('input-xml-nfe').click()">📥 Importar XML (Duplicatas)</button>
         <input type="file" id="input-xml-nfe" accept=".xml" multiple style="display:none" onchange="processarXmlNFe(this)">
@@ -5059,6 +5065,7 @@ function aplicarFiltrosDespesas() {
   const periodo = document.getElementById('df-periodo')?.value||'mes';
   const cat     = document.getElementById('df-cat')?.value||'';
   const status  = document.getElementById('df-status')?.value||'';
+  const merc    = document.getElementById('df-mercadoria')?.value||'';
   const customDiv = document.getElementById('df-custom-dates');
   if (customDiv) customDiv.style.display = periodo==='custom'?'flex':'none';
 
@@ -5066,10 +5073,11 @@ function aplicarFiltrosDespesas() {
   const todas = window._despesasAll||[];
 
   let filtradas = todas.filter(d => {
-    const okPer = !d.vencimento || (d.vencimento >= de && d.vencimento <= ate);
-    const okCat = !cat || d.categoria === cat;
-    const okSt  = !status || d.status === status;
-    return okPer && okCat && okSt;
+    const okPer  = !d.vencimento || (d.vencimento >= de && d.vencimento <= ate);
+    const okCat  = !cat || d.categoria === cat;
+    const okSt   = !status || d.status === status;
+    const okMerc = !merc || (merc==='sim' ? !!d.eh_compra_mercadoria : !d.eh_compra_mercadoria);
+    return okPer && okCat && okSt && okMerc;
   });
 
   window._despesasFiltradas = filtradas;
