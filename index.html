@@ -1679,6 +1679,7 @@ async function renderVendas(c) {
           onkeydown="if(event.key==='Escape')fecharSugestoes()"
           autocomplete="off">
         <div id="v-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:220px;overflow-y:auto;margin-top:2px"></div>
+        <div style="margin-top:6px"><span onclick="abrirCadastroRapidoProdutoVenda()" style="font-size:12px;color:var(--blue);cursor:pointer;font-weight:600">+ Não achou? Cadastrar novo produto/serviço</span></div>
       </div>
       <div id="v-selecionados" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;min-height:10px"></div>
       <div id="v-preview" style="margin-top:6px;font-size:12px;color:var(--blue);min-height:16px"></div>
@@ -2109,7 +2110,15 @@ function buscarProdutoVenda(termo) {
     return cod.includes(busca) || nome.includes(busca);
   });
 
-  if (!encontrados.length) { sug.style.display='none'; return; }
+  if (!encontrados.length) {
+    const buscaEsc = busca.replace(/'/g,"\\'").replace(/</g,'&lt;');
+    sug.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--gray-400)">'
+      + 'Nenhum produto encontrado para "' + buscaEsc + '". '
+      + '<span onclick="abrirCadastroRapidoProdutoVenda(\'' + buscaEsc + '\')" style="color:var(--blue);cursor:pointer;font-weight:600">+ Cadastrar agora</span>'
+      + '</div>';
+    sug.style.display = 'block';
+    return;
+  }
 
   sug.innerHTML = encontrados.map(p => {
     const isServico = p.tipo === 'servico';
@@ -2155,6 +2164,14 @@ function selecionarProduto(codigo) {
 function atualizarQtyVenda(codigo, val) {
   const p = window._produtosSelecionados.find(x=>x.codigo===codigo);
   if (p) { p.qty = Math.max(1, parseInt(val)||1); atualizarSelecionados(); }
+}
+
+// Permite informar manualmente o valor de um item cujo preço de venda está
+// zerado no estoque (ex: "mão de obra"/serviço cujo valor varia a cada venda).
+// Atualiza só este item da venda atual — não altera o preço cadastrado no estoque.
+function atualizarValorManualVenda(codigo, val) {
+  const p = window._produtosSelecionados.find(x=>x.codigo===codigo);
+  if (p) { p.venda = Math.max(0, parseFloat(val)||0); atualizarSelecionados(); }
 }
 
 function toggleBoniVenda(codigo, isBoni) {
@@ -2495,17 +2512,25 @@ function atualizarSelecionados() {
   if (selDiv) selDiv.innerHTML = sel.map(function(p) {
     const qty = p.qty||1;
     const isBoni = p.bonificacao||p._isBoni||false;
+    const precoZerado = !isBoni && (Number(p.venda)||0) === 0;
     const itemDescTipo = p.descTipo||'pct';
     const itemDescVal  = Math.max(0, Number(p.descVal)||0);
     const { liquido: subtProdLiquido } = calcDescontoItem(p);
     const subtProd = isBoni ? 0 : subtProdLiquido;
-    const bgColor  = isBoni ? '#78350F' : '#1A3A5C';
+    const bgColor  = isBoni ? '#78350F' : precoZerado ? '#5C3A1A' : '#1A3A5C';
     return '<div style="display:inline-flex;align-items:center;gap:6px;background:'+bgColor+';border-radius:10px;padding:6px 10px;margin:2px;font-size:12px">'
       + (isBoni?'<span style="font-size:12px">🎁</span>':'')
       + '<span style="color:white;font-weight:600">' + p.codigo + ' — ' + p.nome + '</span>'
       + (isBoni
         ? '<span style="color:#FCD34D;font-size:10px;font-weight:700">BONIFICAÇÃO</span>'
-        : '<span style="color:rgba(255,255,255,.6);font-size:11px">R$ ' + f(p.venda) + ' un.</span>')
+        : precoZerado
+          ? '<div style="display:flex;align-items:center;gap:3px;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.5);border-radius:6px;padding:2px 6px">'
+            + '<span style="color:#FCD34D;font-size:10px;font-weight:600">💲 Informar valor:</span>'
+            + '<input type="number" min="0" step="0.01" value="' + (p.venda?p.venda:'') + '" placeholder="0,00" '
+            + 'style="width:64px;background:transparent;border:none;color:#FCD34D;font-size:12px;font-weight:700;text-align:center;outline:none" '
+            + 'onchange="atualizarValorManualVenda(\'' + p.codigo + '\',this.value)">'
+            + '</div>'
+          : '<span style="color:rgba(255,255,255,.6);font-size:11px">R$ ' + f(p.venda) + ' un.</span>')
       + '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);border-radius:6px;padding:2px 6px">'
       + '<span style="color:rgba(255,255,255,.6);font-size:10px">Qtd:</span>'
       + '<input type="number" value="' + qty + '" min="1" '
@@ -2577,6 +2602,79 @@ function atualizarSelecionados() {
 function fecharSugestoes() {
   const sug = document.getElementById('v-sugestoes');
   if (sug) sug.style.display = 'none';
+}
+
+// ── CADASTRO RÁPIDO DE PRODUTO/SERVIÇO, SEM SAIR DA VENDA ──────────
+async function abrirCadastroRapidoProdutoVenda(nomeSugerido) {
+  fecharSugestoes();
+  // Busca o próximo código automaticamente, igual ao cadastro feito em Estoque
+  const { data: prods } = await sb.from('produtos').select('codigo').eq('user_id', currentUser.id);
+  let nextCode = '1';
+  if (prods && prods.length > 0) {
+    const nums = prods.map(p => { const n = parseInt((p.codigo||'').replace(/[^0-9]/g,'')); return isNaN(n)?0:n; });
+    nextCode = String(Math.max(...nums) + 1);
+  }
+  const nomeEsc = (nomeSugerido||'').replace(/"/g,'&quot;');
+
+  document.getElementById('modal-body').innerHTML = `
+    <h3>⚡ Cadastro Rápido de Produto/Serviço</h3>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:12px">Cadastra e já adiciona automaticamente nesta venda — sem perder o que você já preencheu.</p>
+    <div class="form-grid">
+      <div class="form-group"><label>Código (automático)</label><input type="text" id="qp-cod" value="${nextCode}" style="background:var(--gray-100);font-weight:700;color:var(--blue)"></div>
+      <div class="form-group"><label>Nome</label><input type="text" id="qp-nome" value="${nomeEsc}" placeholder="Nome do produto/serviço"></div>
+      <div class="form-group"><label>Categoria</label><input type="text" id="qp-cat" placeholder="Ex: Whey"></div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="qp-tipo" onchange="toggleTipoServico('qp')">
+          <option value="produto">📦 Produto</option>
+          <option value="servico">🔧 Serviço</option>
+        </select>
+      </div>
+      <div class="form-group" id="qp-custo-group"><label>Custo Unitário (R$)</label><input type="number" id="qp-custo" placeholder="0,00"></div>
+      <div class="form-group"><label>Preço de Venda (R$)</label><input type="number" id="qp-venda" placeholder="Pode deixar em branco e definir na hora da venda"></div>
+      <div class="form-group" id="qp-estq-group"><label>Estoque Inicial</label><input type="number" id="qp-estq" placeholder="0"></div>
+    </div>
+    <div id="qp-servico-info" style="display:none;margin-top:12px;background:rgba(46,123,250,.08);border:1px solid rgba(46,123,250,.25);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--blue)">
+      🔧 Serviços não têm custo de mercadoria nem estoque — representam mão de obra. O valor de venda é cobrado normalmente, mas não entra no CMV nem no "Estoque em Valor".
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" id="qp-save-btn">✅ Cadastrar e Adicionar à Venda</button>
+    </div>`;
+  document.getElementById('qp-save-btn').addEventListener('click', salvarProdutoRapidoVenda);
+  openModal();
+}
+
+async function salvarProdutoRapidoVenda() {
+  const tipo = document.getElementById('qp-tipo')?.value||'produto';
+  const isServico = tipo === 'servico';
+  const dados = {
+    user_id: currentUser.id,
+    codigo: document.getElementById('qp-cod').value.trim().toUpperCase(),
+    nome: document.getElementById('qp-nome').value.trim(),
+    categoria: document.getElementById('qp-cat').value.trim(),
+    tipo,
+    custo: isServico ? 0 : (parseFloat(document.getElementById('qp-custo').value)||0),
+    venda: parseFloat(document.getElementById('qp-venda').value)||0,
+    estoque: isServico ? 0 : (parseInt(document.getElementById('qp-estq').value)||0),
+    bonificacao: false,
+  };
+  if (!dados.codigo || !dados.nome) { showToast('Código e nome são obrigatórios','error'); return; }
+
+  const { data: novoProduto, error } = await sb.from('produtos').insert(dados).select().single();
+  if (error) { showToast('Erro ao cadastrar produto: '+error.message,'error'); return; }
+
+  // Atualiza o catálogo em memória usado pela busca da venda
+  if (!window._produtosVenda) window._produtosVenda = [];
+  window._produtosVenda.push(novoProduto);
+
+  // Já adiciona o produto recém-criado nesta venda em andamento
+  if (!window._produtosSelecionados) window._produtosSelecionados = [];
+  window._produtosSelecionados.push(Object.assign({}, novoProduto, {qty:1}));
+
+  closeModal();
+  showToast('✅ Produto cadastrado e adicionado à venda!','success');
+  atualizarSelecionados();
 }
 
 function buscarProdutoEdicao(termo) {
@@ -6092,3 +6190,4 @@ init();
 </script>
 </body>
 </html>
+  
