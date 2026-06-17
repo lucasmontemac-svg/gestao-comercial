@@ -5264,15 +5264,19 @@ function renderDespFixos(todas) {
     const media = g.valores.reduce((a,b)=>a+b,0)/g.valores.length;
     const ultimo = g.valores[g.valores.length-1];
     const variou = g.valores.length > 1 && Math.max(...g.valores) !== Math.min(...g.valores);
-    // IDs dos lançamentos deste grupo para excluir todos
+    // IDs dos lançamentos deste grupo para excluir/editar todos de uma vez
     const ids = g.ids||[];
     const idsJson = JSON.stringify(ids).replace(/"/g,'&quot;');
+    const descEsc = (g.descricao||'').replace(/'/g,"\\'");
     return `<tr style="border-bottom:1px solid var(--gray-100)">
       <td style="padding:10px 12px;font-size:13px">
         <strong>${g.descricao}</strong>
         ${isRecorrente ? '<span style="margin-left:6px;font-size:10px;background:#EFF6FF;color:var(--blue);padding:2px 6px;border-radius:10px">🔁 Recorrente</span>' : ''}
       </td>
-      <td style="padding:10px 12px;text-align:center"><span class="badge badge-blue">${g.categoria||'—'}</span></td>
+      <td style="padding:10px 12px;text-align:center">
+        <span class="badge badge-blue">${g.categoria||'—'}</span>
+        <button class="btn btn-sm btn-outline" style="padding:2px 6px;margin-left:4px" onclick="abrirEditCategoriaDespesa('${descEsc}','${idsJson}','${g.categoria||''}')" title="Alterar modalidade (Fixo/Variável)">✏️</button>
+      </td>
       <td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--gray-400)">${g.valores.length}x lançado</td>
       <td style="padding:10px 12px;text-align:right;font-size:13px;font-weight:700;color:var(--red)">R$ ${f(ultimo)}</td>
       <td style="padding:10px 12px;text-align:right;font-size:12px;color:var(--gray-400)">
@@ -5320,6 +5324,42 @@ function renderDespFixos(todas) {
   <div style="margin-top:16px;background:rgba(46,117,182,.06);border:1px solid rgba(46,117,182,.15);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--blue)">
     💡 <strong>Dica:</strong> Para identificar automaticamente como fixo, use sempre o mesmo nome ao lançar (ex: "Aluguel") ou marque a categoria como "Fixo".
   </div>`;
+}
+
+// ── ALTERAR MODALIDADE (Fixo/Variável) DE UM GRUPO DE LANÇAMENTOS ──
+function abrirEditCategoriaDespesa(descricao, idsJson, categoriaAtual) {
+  let ids; try { ids = JSON.parse(idsJson); } catch(e) { ids = []; }
+  if (!ids.length) { showToast('Nenhum lançamento encontrado','error'); return; }
+
+  document.getElementById('modal-body').innerHTML = `
+    <h3>✏️ Alterar Modalidade</h3>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:16px">
+      Atualizar a modalidade de <strong>${descricao}</strong> (${ids.length} lançamento${ids.length>1?'s':''}).
+    </p>
+    <div class="form-group">
+      <label>Nova Modalidade</label>
+      <select id="ecd-categoria">
+        <option value="Fixo"${categoriaAtual==='Fixo'?' selected':''}>Fixo</option>
+        <option value="Variável"${categoriaAtual==='Variável'?' selected':''}>Variável</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" id="ecd-save-btn">💾 Salvar</button>
+    </div>`;
+  document.getElementById('ecd-save-btn').addEventListener('click', function(){ salvarCategoriaDespesa(idsJson); });
+  openModal();
+}
+
+async function salvarCategoriaDespesa(idsJson) {
+  let ids; try { ids = JSON.parse(idsJson); } catch(e) { ids = []; }
+  if (!ids.length) { showToast('Nenhum lançamento encontrado','error'); return; }
+  const novaCategoria = document.getElementById('ecd-categoria').value;
+  const { error } = await sb.from('despesas').update({ categoria: novaCategoria }).in('id', ids);
+  if (error) { showToast('Erro ao atualizar modalidade: '+error.message,'error'); return; }
+  closeModal();
+  showToast('✅ Modalidade atualizada!','success');
+  navigate('despesas');
 }
 
 async function excluirLancamentosFixos(descricao, idsJson) {
@@ -5917,4 +5957,3 @@ init();
 </script>
 </body>
 </html>
-  
