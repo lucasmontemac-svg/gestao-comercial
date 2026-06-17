@@ -4883,6 +4883,8 @@ async function renderDespesas(c) {
         <option value="pendente">⏳ Pendente</option>
       </select>
       <div style="display:flex;gap:6px;margin-left:auto">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('input-xml-nfe').click()">📥 Importar XML (Duplicatas)</button>
+        <input type="file" id="input-xml-nfe" accept=".xml" multiple style="display:none" onchange="processarXmlNFe(this)">
         <button class="btn btn-success btn-sm" onclick="exportarDespesasExcel()">📊 Excel</button>
         <button class="btn btn-danger btn-sm" onclick="exportarDespesasPDF()">📄 PDF</button>
       </div>
@@ -5432,6 +5434,139 @@ async function salvarDespesa() {
   if(!dados.descricao){showToast('Informe a descrição','error');return;}
   await sb.from('despesas').insert(dados);
   showToast('Despesa registrada!','success');
+  navigate('despesas');
+}
+
+// ── IMPORTAR DUPLICATAS A PARTIR DO XML DA NOTA FISCAL (NFe) ──────
+function formatarNumeroNF(nNF) {
+  const n = parseInt(nNF, 10);
+  if (isNaN(n)) return nNF||'';
+  return n.toLocaleString('pt-BR');
+}
+
+function extrairDuplicatasXml(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) return null;
+
+  const emit = doc.getElementsByTagName('emit')[0];
+  const xNome = emit ? (emit.getElementsByTagName('xNome')[0]?.textContent||'').trim() : '';
+  const ide = doc.getElementsByTagName('ide')[0];
+  const nNF = ide ? (ide.getElementsByTagName('nNF')[0]?.textContent||'').trim() : '';
+  const numeroFmt = formatarNumeroNF(nNF);
+
+  const dups = Array.from(doc.getElementsByTagName('dup'));
+  const total = dups.length;
+  if (!total) return { emitente: xNome, numero: numeroFmt, itens: [] };
+
+  const itens = dups.map((dupEl, i) => {
+    const vDup = parseFloat((dupEl.getElementsByTagName('vDup')[0]?.textContent||'0').replace(',','.'))||0;
+    const dVenc = (dupEl.getElementsByTagName('dVenc')[0]?.textContent||'').trim().slice(0,10);
+    const descricao = 'BOLETO ' + (i+1) + '/' + total + ' ' + xNome.toUpperCase() + (numeroFmt?(' DANFE '+numeroFmt):'');
+    return { descricao, valor: vDup, vencimento: dVenc };
+  });
+  return { emitente: xNome, numero: numeroFmt, itens };
+}
+
+async function processarXmlNFe(input) {
+  const files = Array.from(input.files||[]);
+  if (!files.length) return;
+
+  const leituras = files.map(file => new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => resolve({ nome: file.name, texto: e.target.result });
+    reader.onerror = () => resolve({ nome: file.name, texto: null });
+    reader.readAsText(file);
+  }));
+
+  const resultados = await Promise.all(leituras);
+  let todosItens = [];
+  const comFalha = [];
+  const semDuplicata = [];
+
+  resultados.forEach(r => {
+    if (!r.texto) { comFalha.push(r.nome); return; }
+    const dados = extrairDuplicatasXml(r.texto);
+    if (!dados) { comFalha.push(r.nome); return; }
+    if (!dados.itens.length) { semDuplicata.push(r.nome); return; }
+    todosItens = todosItens.concat(dados.itens);
+  });
+
+  input.value = '';
+
+  if (comFalha.length) showToast('Não foi possível ler: ' + comFalha.join(', '), 'error');
+  if (semDuplicata.length) showToast('Sem duplicatas (cobrança) em: ' + semDuplicata.join(', '), 'error');
+  if (!todosItens.length) {
+    if (!comFalha.length && !semDuplicata.length) showToast('Nenhuma duplicata encontrada no XML','error');
+    return;
+  }
+
+  abrirRevisaoImportXml(todosItens);
+}
+
+function abrirRevisaoImportXml(itens) {
+  window._xmlImportItens = itens;
+
+  document.getElementById('modal-body').innerHTML = `
+    <h3>📥 Importar Duplicatas do XML</h3>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:14px">
+      Encontradas <strong>${itens.length}</strong> duplicata(s). Escolha o modelo da despesa e confira os lançamentos antes de importar.
+    </p>
+    <div class="form-group" style="max-width:260px">
+      <label>Modelo da Despesa</label>
+      <select id="ximp-categoria">
+        <option value="Fixo">Fixo</option>
+        <option value="Variável">Variável</option>
+        <option value="Eventual">Eventual</option>
+      </select>
+    </div>
+    <div style="max-height:300px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;margin-top:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--gray-50)">
+          <th style="padding:8px;text-align:center"><input type="checkbox" id="ximp-all" checked onchange="document.querySelectorAll('.ximp-chk').forEach(c=>c.checked=this.checked)"></th>
+          <th style="padding:8px;text-align:left">Descrição</th>
+          <th style="padding:8px;text-align:center">Vencimento</th>
+          <th style="padding:8px;text-align:right">Valor</th>
+        </tr></thead>
+        <tbody>
+          ${itens.map((it,i)=>`<tr style="border-top:1px solid var(--gray-100)">
+            <td style="padding:8px;text-align:center"><input type="checkbox" class="ximp-chk" data-idx="${i}" checked></td>
+            <td style="padding:8px">${it.descricao}</td>
+            <td style="padding:8px;text-align:center">${it.vencimento?it.vencimento.split('-').reverse().join('/'):'—'}</td>
+            <td style="padding:8px;text-align:right;font-weight:700;color:var(--red)">R$ ${f(it.valor)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" id="ximp-confirm-btn">✅ Importar Selecionadas</button>
+    </div>`;
+  document.getElementById('ximp-confirm-btn').addEventListener('click', confirmarImportXml);
+  openModal();
+}
+
+async function confirmarImportXml() {
+  const itens = window._xmlImportItens||[];
+  const categoria = document.getElementById('ximp-categoria').value;
+  const selecionados = Array.from(document.querySelectorAll('.ximp-chk'))
+    .filter(c => c.checked)
+    .map(c => itens[parseInt(c.dataset.idx,10)]);
+
+  if (!selecionados.length) { showToast('Selecione ao menos uma duplicata','error'); return; }
+
+  const linhas = selecionados.map(it => ({
+    user_id: currentUser.id,
+    descricao: it.descricao,
+    valor: it.valor,
+    vencimento: it.vencimento,
+    categoria,
+    status: 'pendente',
+  }));
+
+  const { error } = await sb.from('despesas').insert(linhas);
+  if (error) { showToast('Erro ao importar: '+error.message,'error'); return; }
+  closeModal();
+  showToast('📥 ' + linhas.length + ' duplicata(s) importada(s)!','success');
   navigate('despesas');
 }
 
