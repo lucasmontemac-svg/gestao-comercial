@@ -1653,7 +1653,36 @@ async function renderVendas(c) {
           <option value="PIX">📱 PIX</option>
           <option value="Cartão">💳 Cartão</option>
           <option value="Promissória">📝 Promissória</option>
+          <option value="Misto">🔀 Misto (2 formas)</option>
         </select>
+      </div>
+      <!-- PAGAMENTO MISTO -->
+      <div id="campo-pagamento-misto" style="display:none;grid-column:span 2">
+        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:14px;display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:end">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px">1ª Forma</label>
+            <select id="v-misto-forma1" onchange="onMistoChange()" style="width:100%;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;color:var(--gray-800);outline:none;background:var(--white)">
+              <option value="Dinheiro">💵 Dinheiro</option>
+              <option value="PIX">📱 PIX</option>
+              <option value="Cartão">💳 Cartão</option>
+            </select>
+            <input type="number" id="v-misto-valor1" placeholder="R$ 0,00" min="0" step="0.01"
+              oninput="onMistoValorChange()"
+              style="width:100%;margin-top:6px;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;outline:none">
+          </div>
+          <div style="text-align:center;padding-bottom:10px;color:var(--gray-400);font-weight:700;font-size:18px">+</div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px">2ª Forma</label>
+            <select id="v-misto-forma2" style="width:100%;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;color:var(--gray-800);outline:none;background:var(--white)">
+              <option value="PIX">📱 PIX</option>
+              <option value="Dinheiro">💵 Dinheiro</option>
+              <option value="Cartão">💳 Cartão</option>
+            </select>
+            <input type="number" id="v-misto-valor2" placeholder="R$ 0,00" min="0" step="0.01" readonly
+              style="width:100%;margin-top:6px;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--gray-100);color:var(--gray-600)">
+          </div>
+        </div>
+        <div id="misto-hint" style="font-size:11px;color:var(--gray-400);margin-top:6px;padding:0 2px">💡 Digite o valor da 1ª forma — o restante é calculado automaticamente para a 2ª.</div>
       </div>
       <div class="form-group" id="campo-taxa-maquineta" style="display:none">
         <label style="display:flex;align-items:center;justify-content:space-between">
@@ -1856,7 +1885,7 @@ function renderVendasRows(vendas) {
       <td style="font-size:12px;color:var(--gray-600);max-width:150px">${v.observacao||'—'}</td>
       <td>
       <span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span>
-      ${v.forma_pagamento?`<br><span style="font-size:10px;color:var(--gray-400)">${v.forma_pagamento==='PIX'?'📱':v.forma_pagamento==='Cartão'?'💳':v.forma_pagamento==='Promissória'?'📝':'💵'} ${v.forma_pagamento}${v.forma_pagamento==='Cartão'&&v.parcelas_cartao>1?' '+v.parcelas_cartao+'x':''}${v.forma_pagamento==='Cartão'&&v.taxa_maquineta>0?' ('+v.taxa_maquineta+'%)':''}</span>`:''}
+      ${v.forma_pagamento?`<br><span style="font-size:10px;color:var(--gray-400)">${v.forma_pagamento==='PIX'?'📱':v.forma_pagamento==='Cartão'?'💳':v.forma_pagamento==='Promissória'?'📝':v.forma_pagamento&&v.forma_pagamento.startsWith('Misto')?'🔀':'💵'} ${v.forma_pagamento}${v.forma_pagamento==='Cartão'&&v.parcelas_cartao>1?' '+v.parcelas_cartao+'x':''}${v.forma_pagamento==='Cartão'&&v.taxa_maquineta>0?' ('+v.taxa_maquineta+'%)':''}</span>`:''}
 
     </td>
       <td style="display:flex;gap:4px">
@@ -2240,6 +2269,11 @@ function atualizarMargemPreview() {
   const taxaPct = forma==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
   const valorLiquido = valorBruto * (1 - taxaPct/100);
 
+  // Atualiza valor2 do misto sempre que total mudar
+  if (forma === 'Misto') {
+    onMistoValorChange();
+  }
+
   const custoSel = sel.reduce(function(a,p){
     const isBoni = p.bonificacao||p._isBoni||false;
     return a + (isBoni ? 0 : Number(p.custo||0)*(p.qty||1));
@@ -2364,10 +2398,12 @@ function onFormaPagamentoChange() {
   const forma = document.getElementById('v-forma-pgto')?.value;
   const campoTaxa = document.getElementById('campo-taxa-maquineta');
   const campoParc = document.getElementById('campo-parcelas');
+  const campoMisto = document.getElementById('campo-pagamento-misto');
   const preview   = document.getElementById('parcelas-preview');
 
   if (campoTaxa) campoTaxa.style.display = forma==='Cartão' ? 'block' : 'none';
   if (campoParc) campoParc.style.display = forma==='Promissória' ? 'block' : 'none';
+  if (campoMisto) campoMisto.style.display = forma==='Misto' ? 'block' : 'none';
 
   if (forma === 'Cartão') {
     atualizarTaxaCartao();
@@ -2378,7 +2414,42 @@ function onFormaPagamentoChange() {
   } else if (preview) {
     preview.style.display = 'none';
   }
+
+  if (forma === 'Misto') {
+    onMistoChange();
+  }
+
   atualizarMargemPreview();
+}
+
+function onMistoChange() {
+  // Garante que as duas formas sejam diferentes
+  const f1 = document.getElementById('v-misto-forma1')?.value;
+  const f2el = document.getElementById('v-misto-forma2');
+  if (f2el && f2el.value === f1) {
+    const opts = ['Dinheiro','PIX','Cartão'].filter(o=>o!==f1);
+    f2el.value = opts[0];
+  }
+  onMistoValorChange();
+}
+
+function onMistoValorChange() {
+  const v1 = parseFloat(document.getElementById('v-misto-valor1')?.value)||0;
+  const sel = window._produtosSelecionados||[];
+  const subtotal = sel.reduce((a,p)=>a+(p.bonificacao||p._isBoni?0:Number(p.venda)*(p.qty||1)),0);
+  const descPct = getDescontoPct(subtotal);
+  const total = subtotal*(1-descPct/100);
+  const v2 = Math.max(0, total - v1);
+  const el2 = document.getElementById('v-misto-valor2');
+  if (el2) el2.value = v2.toFixed(2);
+  const hint = document.getElementById('misto-hint');
+  if (hint && total > 0) {
+    const f1 = document.getElementById('v-misto-forma1')?.value||'';
+    const f2 = document.getElementById('v-misto-forma2')?.value||'';
+    hint.innerHTML = v1 > total
+      ? '⚠️ Valor da 1ª forma maior que o total da venda!'
+      : `✅ ${f1}: <strong>R$ ${f(v1)}</strong> + ${f2}: <strong>R$ ${f(v2)}</strong> = Total: <strong>R$ ${f(total)}</strong>`;
+  }
 }
 
 function atualizarPreviewParcelas() {
@@ -2933,6 +3004,17 @@ function coletarDadosVenda() {
   const numParcelas = formaPgto==='Promissória' ? (parseInt(document.getElementById('v-num-parcelas')?.value)||2) : 0;
   const cpf = document.getElementById('v-cpf')?.value.trim()||'';
 
+  // Pagamento misto
+  let formaPgtoFinal = formaPgto;
+  let mistoForma1 = '', mistoForma2 = '', mistoValor1 = 0, mistoValor2 = 0;
+  if (formaPgto === 'Misto') {
+    mistoForma1 = document.getElementById('v-misto-forma1')?.value||'Dinheiro';
+    mistoForma2 = document.getElementById('v-misto-forma2')?.value||'PIX';
+    mistoValor1 = parseFloat(document.getElementById('v-misto-valor1')?.value)||0;
+    mistoValor2 = parseFloat(document.getElementById('v-misto-valor2')?.value)||0;
+    formaPgtoFinal = `Misto (${mistoForma1} + ${mistoForma2})`;
+  }
+
   // Separa itens normais e bonificações
   const itensBoni = sel.filter(p=>p.bonificacao||p._isBoni).map(p=>p.codigo);
   const codigos = sel.flatMap(p=>Array(p.qty||1).fill(p.codigo)).join(',');
@@ -2944,7 +3026,8 @@ function coletarDadosVenda() {
   }
 
   return {sel, cliente, tel, cpf, contato, data, desc, status, obs, codigos, itensBoniStr,
-    formaPgto, taxaMaquineta, parcelasCartao, numParcelas, vencimentos};
+    formaPgto: formaPgtoFinal, taxaMaquineta, parcelasCartao, numParcelas, vencimentos,
+    mistoForma1, mistoForma2, mistoValor1, mistoValor2};
 }
 
 function validarFormVenda(dados, exigirVencimentos) {
@@ -2956,6 +3039,15 @@ function validarFormVenda(dados, exigirVencimentos) {
         showToast(`❌ Informe o vencimento da Parcela ${i+1}/${dados.numParcelas}`, 'error');
         return false;
       }
+    }
+  }
+  // Valida pagamento misto
+  if (dados.formaPgto && dados.formaPgto.startsWith('Misto')) {
+    if (!dados.mistoValor1 || dados.mistoValor1 <= 0) {
+      showToast('❌ Informe o valor da 1ª forma de pagamento', 'error'); return false;
+    }
+    if (dados.mistoValor2 < 0) {
+      showToast('❌ Valor da 1ª forma maior que o total da venda!', 'error'); return false;
     }
   }
   return true;
@@ -3005,10 +3097,15 @@ async function concretizarVenda(dados) {
   // Promissória: pagamento sempre fica pendente até as parcelas serem pagas
   const statusFinal = dados.formaPgto==='Promissória' ? 'pendente' : dados.status;
 
+  // Se misto, acrescenta detalhe dos valores na observação interna
+  const obsFinal = (dados.formaPgto&&dados.formaPgto.startsWith('Misto'))
+    ? `${dados.obs ? dados.obs + ' | ' : ''}Pgto misto: ${dados.mistoForma1} R$${f(dados.mistoValor1)} + ${dados.mistoForma2} R$${f(dados.mistoValor2)}`
+    : dados.obs;
+
   const { data: vendaInserida, error } = await sb.from('vendas').insert({
     user_id:currentUser.id, cliente:dados.cliente, telefone:dados.tel, cpf:dados.cpf, contato:dados.contato,
     codigos:dados.codigos, desconto:dados.desc, total, status:statusFinal,
-    data_venda:dados.data, observacao:dados.obs, itens_bonificacao:dados.itensBoniStr,
+    data_venda:dados.data, observacao:obsFinal, itens_bonificacao:dados.itensBoniStr,
     forma_pagamento:dados.formaPgto, taxa_maquineta:dados.taxaMaquineta, parcelas_cartao:dados.parcelasCartao,
     valor_liquido:valorLiquido, valor_bruto:valorBruto
   }).select().single();
