@@ -1693,7 +1693,17 @@ async function renderVendas(c) {
           ${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}">${n}x</option>`).join('')}
         </select>
         <input type="hidden" id="v-taxa-maquineta" value="0">
-        <div id="taxa-cartao-info" style="font-size:11px;color:var(--gray-400);margin-top:4px"></div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;user-select:none">
+          <div style="position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0">
+            <input type="checkbox" id="v-repassar-taxa" onchange="atualizarTaxaCartao()" style="opacity:0;width:0;height:0;position:absolute">
+            <span style="position:absolute;inset:0;border-radius:20px;background:var(--gray-200);transition:background .2s;cursor:pointer" id="v-repassar-taxa-track" onclick="document.getElementById('v-repassar-taxa').click()">
+              <span id="v-repassar-taxa-thumb" style="position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></span>
+            </span>
+          </div>
+          <span style="font-size:12px;color:var(--gray-600);font-weight:600">Repassar taxa ao cliente</span>
+          <span style="font-size:11px;color:var(--gray-400)">(cliente paga a taxa por cima)</span>
+        </label>
+        <div id="taxa-cartao-info" style="font-size:11px;color:var(--gray-400);margin-top:6px"></div>
       </div>
       <div class="form-group" id="campo-parcelas" style="display:none">
         <label>Número de Parcelas</label>
@@ -2267,7 +2277,10 @@ function atualizarMargemPreview() {
 
   const forma   = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
   const taxaPct = forma==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
-  const valorLiquido = valorBruto * (1 - taxaPct/100);
+  const repassar = forma==='Cartão' && (window._cartaoRepassar||false);
+  // Se repassar: cliente paga mais, lojista recebe o preço base — margem não é afetada pela taxa
+  const valorCobrado = repassar ? (window._cartaoValorCobrado||valorBruto) : valorBruto;
+  const valorLiquido = forma==='Cartão' ? valorCobrado*(1-taxaPct/100) : valorBruto;
 
   // Atualiza valor2 do misto sempre que total mudar
   if (forma === 'Misto') {
@@ -2279,17 +2292,25 @@ function atualizarMargemPreview() {
     return a + (isBoni ? 0 : Number(p.custo||0)*(p.qty||1));
   },0);
 
-  const margemLiq = valorLiquido>0 ? ((valorLiquido-custoSel)/valorLiquido*100) : 0;
+  // Para margem: se repassa, usa valorBase (o que lojista efetivamente recebe ≈ preço dos produtos)
+  const baseParaMargem = repassar ? valorBruto : valorLiquido;
+  const margemLiq = baseParaMargem>0 ? ((baseParaMargem-custoSel)/baseParaMargem*100) : 0;
   const corMg = margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)';
 
   let html = '<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--gray-200);font-size:12px;color:var(--gray-600)">';
-  html += '<span>Total Bruto: <strong>R$ ' + f(valorBruto) + '</strong></span>';
-  if (taxaPct>0) {
-    html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong> <span style="color:var(--red);font-size:11px">(-' + taxaPct + '% maquineta)</span></span>';
+  if (repassar && taxaPct>0) {
+    html += '<span>Preço base: <strong>R$ ' + f(valorBruto) + '</strong></span>';
+    html += '<span>Cliente paga: <strong style="color:var(--navy)">R$ ' + f(valorCobrado) + '</strong> <span style="color:var(--blue);font-size:11px">(+' + taxaPct + '% repassado)</span></span>';
   } else {
-    html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong></span>';
+    html += '<span>Total Bruto: <strong>R$ ' + f(valorBruto) + '</strong></span>';
+    if (taxaPct>0) {
+      html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong> <span style="color:var(--red);font-size:11px">(-' + taxaPct + '% maquineta)</span></span>';
+    } else {
+      html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong></span>';
+    }
   }
   html += '<span>Margem Líquida: <strong style="color:' + corMg + '">' + margemLiq.toFixed(1) + '%</strong></span>';
+  if (repassar && taxaPct>0) html += '<span style="color:var(--green-dim);font-size:11px">✅ Sem impacto da taxa</span>';
   html += '</div>';
   el.innerHTML = html;
 }
@@ -2350,38 +2371,78 @@ function atualizarTaxaCartao() {
   const taxas = getTaxasMaquineta();
   const parcelas = parseInt(document.getElementById('v-parcelas-cartao')?.value)||1;
   const taxaPct  = Number(taxas[parcelas]||0);
-  const hidden   = document.getElementById('v-taxa-maquineta');
+  const repassar = document.getElementById('v-repassar-taxa')?.checked || false;
+
+  // Atualiza visual do toggle
+  const track = document.getElementById('v-repassar-taxa-track');
+  const thumb = document.getElementById('v-repassar-taxa-thumb');
+  if (track) track.style.background = repassar ? 'var(--green)' : 'var(--gray-200)';
+  if (thumb) thumb.style.left = repassar ? '18px' : '2px';
+
+  const hidden = document.getElementById('v-taxa-maquineta');
   if (hidden) hidden.value = taxaPct;
 
-  // Calcula valor bruto (cobrado do cliente) e líquido (após taxa da maquineta)
+  // Se repassar ao cliente: o valor cobrado já inclui a taxa (cliente paga mais)
+  // valorBase = preço dos produtos com desconto
+  // valorCobrado = repassar ? valorBase / (1 - taxa%) : valorBase
+  // valorLiquido (receita real após maquineta) = valorCobrado * (1 - taxa%) ≈ valorBase em ambos os casos
   const sel = window._produtosSelecionados||[];
   const subtotal = sel.reduce(function(a,p){
     const isBoni = p.bonificacao||p._isBoni||false;
     return a + (isBoni ? 0 : Number(p.venda)*(p.qty||1));
   },0);
   const descPct = getDescontoPct(subtotal);
-  const valorBruto = subtotal * (1-descPct/100);
-  const valorLiquido = valorBruto * (1 - taxaPct/100);
+  const valorBase = subtotal * (1-descPct/100);
+
+  // Valor que vai aparecer na cobrança ao cliente
+  const valorCobrado = (repassar && taxaPct>0) ? valorBase / (1 - taxaPct/100) : valorBase;
+  const valorTaxa    = valorCobrado * taxaPct / 100;
+  const valorLiquido = valorCobrado - valorTaxa; // o que lojista recebe de fato
 
   // Custo dos produtos (exclui bonificação)
   const custoSel = sel.reduce(function(a,p){
     const isBoni = p.bonificacao||p._isBoni||false;
     return a + (isBoni ? 0 : Number(p.custo)*(p.qty||1));
   },0);
-  const margemLiq = valorLiquido>0 ? ((valorLiquido-custoSel)/valorLiquido*100) : 0;
+
+  // Se repassa, margem é calculada sobre valorBase (sem taxa — lojista recebe equivalente ao base)
+  const baseParaMargem = repassar ? valorBase : valorLiquido;
+  const margemLiq = baseParaMargem>0 ? ((baseParaMargem-custoSel)/baseParaMargem*100) : 0;
 
   const info = document.getElementById('taxa-cartao-info');
   if (info) {
-    if (valorBruto<=0) {
+    if (valorBase<=0) {
       info.innerHTML = `Selecione produtos para ver o cálculo`;
     } else if (taxaPct>0) {
-      info.innerHTML = `
-        <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:4px">
-          <span>Valor Bruto: <strong>R$ ${f(valorBruto)}</strong></span>
-          <span>Taxa: <strong style="color:var(--red)">${taxaPct}% (- R$ ${f(valorBruto-valorLiquido)})</strong></span>
-          <span>Valor Líquido: <strong style="color:var(--green-dim)">R$ ${f(valorLiquido)}</strong></span>
-          <span>Margem Líquida: <strong style="color:${margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)'}">${margemLiq.toFixed(1)}%</strong></span>
-        </div>`;
+      if (repassar) {
+        info.innerHTML = `
+          <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:8px 10px;margin-top:4px">
+            <div style="font-size:11px;font-weight:700;color:var(--green-dim);margin-bottom:4px">✅ Taxa repassada ao cliente</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--gray-600)">
+              <span>Preço base: <strong>R$ ${f(valorBase)}</strong></span>
+              <span>+ Taxa ${taxaPct}%: <strong style="color:var(--blue)">R$ ${f(valorTaxa)}</strong></span>
+              <span>= Cliente paga: <strong style="color:var(--navy)">R$ ${f(valorCobrado)}</strong></span>
+            </div>
+            <div style="margin-top:4px;font-size:11px;color:var(--gray-600)">
+              Margem: <strong style="color:${margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)'}">${margemLiq.toFixed(1)}%</strong>
+              <span style="color:var(--gray-400)"> (sem impacto da taxa)</span>
+            </div>
+          </div>`;
+      } else {
+        info.innerHTML = `
+          <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:8px;padding:8px 10px;margin-top:4px">
+            <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:4px">💳 Taxa absorvida pelo lojista</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--gray-600)">
+              <span>Valor cobrado: <strong>R$ ${f(valorBase)}</strong></span>
+              <span>- Taxa ${taxaPct}%: <strong style="color:var(--red)">- R$ ${f(valorTaxa)}</strong></span>
+              <span>= Recebe líquido: <strong style="color:var(--green-dim)">R$ ${f(valorLiquido)}</strong></span>
+            </div>
+            <div style="margin-top:4px;font-size:11px;color:var(--gray-600)">
+              Margem: <strong style="color:${margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)'}">${margemLiq.toFixed(1)}%</strong>
+              <span style="color:var(--red)"> (taxa reduz sua margem)</span>
+            </div>
+          </div>`;
+      }
     } else {
       info.innerHTML = `
         <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:4px">
@@ -2391,6 +2452,11 @@ function atualizarTaxaCartao() {
         </div>`;
     }
   }
+
+  // Guarda no window para uso no concretizarVenda
+  window._cartaoRepassar    = repassar;
+  window._cartaoValorCobrado = valorCobrado;
+
   atualizarMargemPreview();
 }
 
@@ -3089,8 +3155,13 @@ async function concretizarVenda(dados) {
   },0) * (1-dados.desc/100);
 
   // valorBruto = valor cobrado do cliente (já com desconto aplicado)
-  const valorBruto = total;
+  // Se há repasse de taxa, o valor cobrado ao cliente já inclui a taxa (calculado em atualizarTaxaCartao)
+  const repassarTaxa = dados.formaPgto==='Cartão' && (window._cartaoRepassar||false);
+  const valorBase = total; // preço dos produtos com desconto
+  const valorBruto = repassarTaxa ? (window._cartaoValorCobrado||valorBase) : valorBase;
   // Para Cartão, a RECEITA registrada (total) é o valor LÍQUIDO já descontando a taxa da maquineta
+  // Com repasse: valorLiquido ≈ valorBase (cliente pagou a taxa, lojista recebe o preço cheio)
+  // Sem repasse: valorLiquido = valorBruto * (1 - taxa%)
   const valorLiquido = dados.formaPgto==='Cartão' ? valorBruto*(1-dados.taxaMaquineta/100) : valorBruto;
   total = valorLiquido; // total passa a representar a receita real
 
@@ -3106,7 +3177,7 @@ async function concretizarVenda(dados) {
     user_id:currentUser.id, cliente:dados.cliente, telefone:dados.tel, cpf:dados.cpf, contato:dados.contato,
     codigos:dados.codigos, desconto:dados.desc, total, status:statusFinal,
     data_venda:dados.data, observacao:obsFinal, itens_bonificacao:dados.itensBoniStr,
-    forma_pagamento:dados.formaPgto, taxa_maquineta:dados.taxaMaquineta, parcelas_cartao:dados.parcelasCartao,
+    forma_pagamento:dados.formaPgto, taxa_maquineta:dados.taxaMaquineta, parcelas_cartao:dados.parcelasCartao, repassar_taxa:repassarTaxa,
     valor_liquido:valorLiquido, valor_bruto:valorBruto
   }).select().single();
   if (error) { showToast('Erro ao registrar venda','error'); return null; }
