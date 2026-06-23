@@ -1693,16 +1693,14 @@ async function renderVendas(c) {
           ${Array.from({length:10},(_,i)=>i+1).map(n=>`<option value="${n}">${n}x</option>`).join('')}
         </select>
         <input type="hidden" id="v-taxa-maquineta" value="0">
-        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;user-select:none">
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;user-select:none" onclick="toggleRepassarTaxa()">
           <div style="position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0">
-            <input type="checkbox" id="v-repassar-taxa" onchange="atualizarTaxaCartao()" style="opacity:0;width:0;height:0;position:absolute">
-            <span style="position:absolute;inset:0;border-radius:20px;background:var(--gray-200);transition:background .2s;cursor:pointer" id="v-repassar-taxa-track" onclick="document.getElementById('v-repassar-taxa').click()">
-              <span id="v-repassar-taxa-thumb" style="position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></span>
-            </span>
+            <span id="v-repassar-taxa-track" style="position:absolute;inset:0;border-radius:20px;background:var(--gray-200);transition:background .2s;display:block"></span>
+            <span id="v-repassar-taxa-thumb" style="position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);display:block"></span>
           </div>
           <span style="font-size:12px;color:var(--gray-600);font-weight:600">Repassar taxa ao cliente</span>
           <span style="font-size:11px;color:var(--gray-400)">(cliente paga a taxa por cima)</span>
-        </label>
+        </div>
         <div id="taxa-cartao-info" style="font-size:11px;color:var(--gray-400);margin-top:6px"></div>
       </div>
       <div class="form-group" id="campo-parcelas" style="display:none">
@@ -2367,17 +2365,20 @@ async function salvarConfigTaxas() {
   atualizarTaxaCartao();
 }
 
+function toggleRepassarTaxa() {
+  window._repassarTaxa = !window._repassarTaxa;
+  const track = document.getElementById('v-repassar-taxa-track');
+  const thumb = document.getElementById('v-repassar-taxa-thumb');
+  if (track) track.style.background = window._repassarTaxa ? 'var(--green)' : 'var(--gray-200)';
+  if (thumb) thumb.style.left = window._repassarTaxa ? '18px' : '2px';
+  atualizarTaxaCartao();
+}
+
 function atualizarTaxaCartao() {
   const taxas = getTaxasMaquineta();
   const parcelas = parseInt(document.getElementById('v-parcelas-cartao')?.value)||1;
   const taxaPct  = Number(taxas[parcelas]||0);
-  const repassar = document.getElementById('v-repassar-taxa')?.checked || false;
-
-  // Atualiza visual do toggle
-  const track = document.getElementById('v-repassar-taxa-track');
-  const thumb = document.getElementById('v-repassar-taxa-thumb');
-  if (track) track.style.background = repassar ? 'var(--green)' : 'var(--gray-200)';
-  if (thumb) thumb.style.left = repassar ? '18px' : '2px';
+  const repassar = window._repassarTaxa || false;
 
   const hidden = document.getElementById('v-taxa-maquineta');
   if (hidden) hidden.value = taxaPct;
@@ -2468,6 +2469,14 @@ function onFormaPagamentoChange() {
   const preview   = document.getElementById('parcelas-preview');
 
   if (campoTaxa) campoTaxa.style.display = forma==='Cartão' ? 'block' : 'none';
+  // Reset do toggle de repasse ao trocar de forma de pagamento
+  if (forma !== 'Cartão') {
+    window._repassarTaxa = false;
+    const track = document.getElementById('v-repassar-taxa-track');
+    const thumb = document.getElementById('v-repassar-taxa-thumb');
+    if (track) track.style.background = 'var(--gray-200)';
+    if (thumb) thumb.style.left = '2px';
+  }
   if (campoParc) campoParc.style.display = forma==='Promissória' ? 'block' : 'none';
   if (campoMisto) campoMisto.style.display = forma==='Misto' ? 'block' : 'none';
 
@@ -6397,4 +6406,4 @@ init();
 </script>
 </body>
 </html>
-  
+                                     
