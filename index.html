@@ -2296,9 +2296,6 @@ function atualizarMargemPreview() {
   const forma   = document.getElementById('v-forma-pgto')?.value||'Dinheiro';
   const taxaPct = forma==='Cartão' ? (parseFloat(document.getElementById('v-taxa-maquineta')?.value)||0) : 0;
   const repassar = forma==='Cartão' && (window._cartaoRepassar||false);
-  // Se repassar: cliente paga mais, lojista recebe o preço base — margem não é afetada pela taxa
-  const valorCobrado = repassar ? (window._cartaoValorCobrado||valorBruto) : valorBruto;
-  const valorLiquido = forma==='Cartão' ? valorCobrado*(1-taxaPct/100) : valorBruto;
 
   // Atualiza valor2 do misto sempre que total mudar
   if (forma === 'Misto') {
@@ -2310,25 +2307,61 @@ function atualizarMargemPreview() {
     return a + (isBoni ? 0 : Number(p.custo||0)*(p.qty||1));
   },0);
 
-  // Para margem: se repassa, usa valorBase (o que lojista efetivamente recebe ≈ preço dos produtos)
-  const baseParaMargem = repassar ? valorBruto : valorLiquido;
+  let valorLiquido = valorBruto; // receita real do lojista após taxas
+  let valorCobrado = valorBruto; // o que o cliente efetivamente paga
+  let htmlExtra = '';
+
+  if (forma === 'Cartão') {
+    valorCobrado = repassar ? (window._cartaoValorCobrado||valorBruto) : valorBruto;
+    valorLiquido = valorCobrado * (1 - taxaPct/100);
+  } else if (forma === 'Misto') {
+    // Calcula receita real considerando taxa do cartão nas partes que usam cartão
+    const f1 = document.getElementById('v-misto-forma1')?.value||'';
+    const f2 = document.getElementById('v-misto-forma2')?.value||'';
+    const taxaMisto = getMistoTaxa();
+    const v1Base = window._mistoV1Base || 0;
+    const v2Base = window._mistoV2Base || 0;
+    const r1 = f1==='Cartão' && window._mistoRepasse1;
+    const r2 = f2==='Cartão' && window._mistoRepasse2;
+    let receita1 = v1Base;
+    let receita2 = v2Base;
+    if (f1==='Cartão' && taxaMisto>0 && !r1) receita1 = v1Base*(1-taxaMisto/100);
+    if (f2==='Cartão' && taxaMisto>0 && !r2) receita2 = v2Base*(1-taxaMisto/100);
+    valorLiquido = receita1 + receita2;
+    valorCobrado = (window._mistoV1Cobrado||v1Base) + (window._mistoV2Cobrado||v2Base);
+    const taxaAbsorvida = valorBruto - valorLiquido;
+    if (taxaMisto>0 && (f1==='Cartão'||f2==='Cartão')) {
+      if (taxaAbsorvida > 0.001) {
+        htmlExtra = '<span style="color:var(--red);font-size:11px">💳 Taxa absorvida: -R$ ' + f(taxaAbsorvida) + '</span>';
+      } else {
+        htmlExtra = '<span style="color:var(--green-dim);font-size:11px">✅ Taxa repassada ao cliente</span>';
+      }
+    }
+  }
+
+  const baseParaMargem = valorLiquido;
   const margemLiq = baseParaMargem>0 ? ((baseParaMargem-custoSel)/baseParaMargem*100) : 0;
   const corMg = margemLiq>=20?'var(--green-dim)':margemLiq>=0?'var(--yellow)':'var(--red)';
 
   let html = '<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--gray-200);font-size:12px;color:var(--gray-600)">';
-  if (repassar && taxaPct>0) {
+  if (forma==='Cartão' && repassar && taxaPct>0) {
     html += '<span>Preço base: <strong>R$ ' + f(valorBruto) + '</strong></span>';
     html += '<span>Cliente paga: <strong style="color:var(--navy)">R$ ' + f(valorCobrado) + '</strong> <span style="color:var(--blue);font-size:11px">(+' + taxaPct + '% repassado)</span></span>';
+    html += '<span style="color:var(--green-dim);font-size:11px">✅ Sem impacto da taxa</span>';
   } else {
     html += '<span>Total Bruto: <strong>R$ ' + f(valorBruto) + '</strong></span>';
-    if (taxaPct>0) {
-      html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong> <span style="color:var(--red);font-size:11px">(-' + taxaPct + '% maquineta)</span></span>';
+    if (forma !== 'Misto') {
+      if (taxaPct>0) {
+        html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong> <span style="color:var(--red);font-size:11px">(-' + taxaPct + '% maquineta)</span></span>';
+      } else {
+        html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong></span>';
+      }
     } else {
-      html += '<span>Total Líquido: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong></span>';
+      html += '<span>Receita líquida: <strong style="color:var(--green-dim)">R$ ' + f(valorLiquido) + '</strong></span>';
+      if (htmlExtra) html += htmlExtra;
     }
   }
   html += '<span>Margem Líquida: <strong style="color:' + corMg + '">' + margemLiq.toFixed(1) + '%</strong></span>';
-  if (repassar && taxaPct>0) html += '<span style="color:var(--green-dim);font-size:11px">✅ Sem impacto da taxa</span>';
   html += '</div>';
   el.innerHTML = html;
 }
@@ -3258,15 +3291,44 @@ async function concretizarVenda(dados) {
     return a+(Number(p.venda)*(p.qty||1));
   },0) * (1-dados.desc/100);
 
-  // valorBruto = valor cobrado do cliente (já com desconto aplicado)
-  // Se há repasse de taxa, o valor cobrado ao cliente já inclui a taxa (calculado em atualizarTaxaCartao)
-  const repassarTaxa = dados.formaPgto==='Cartão' && (window._cartaoRepassar||false);
-  const valorBase = total; // preço dos produtos com desconto
-  const valorBruto = repassarTaxa ? (window._cartaoValorCobrado||valorBase) : valorBase;
-  // Para Cartão, a RECEITA registrada (total) é o valor LÍQUIDO já descontando a taxa da maquineta
-  // Com repasse: valorLiquido ≈ valorBase (cliente pagou a taxa, lojista recebe o preço cheio)
-  // Sem repasse: valorLiquido = valorBruto * (1 - taxa%)
-  const valorLiquido = dados.formaPgto==='Cartão' ? valorBruto*(1-dados.taxaMaquineta/100) : valorBruto;
+  const valorBase = total; // preço dos produtos com desconto (o que o lojista deveria receber)
+  let valorBruto = valorBase;
+  let valorLiquido = valorBase; // receita real após taxas
+
+  if (dados.formaPgto === 'Cartão') {
+    // Cartão puro
+    const repassarTaxa = window._cartaoRepassar || false;
+    valorBruto = repassarTaxa ? (window._cartaoValorCobrado || valorBase) : valorBase;
+    // Com repasse: cliente pagou a taxa, lojista recebe valorBase inteiro
+    // Sem repasse: lojista arca com a taxa, recebe valorBruto*(1-taxa%)
+    valorLiquido = valorBruto * (1 - dados.taxaMaquineta / 100);
+    // valorLiquido ≈ valorBase em ambos os casos (com ou sem repasse)
+
+  } else if (dados.formaPgto && dados.formaPgto.startsWith('Misto')) {
+    // Misto: calcula receita real de cada parte
+    // Partes base (valor de produto alocado para cada forma)
+    const v1Base = window._mistoV1Base ?? dados.mistoValor1;
+    const v2Base = window._mistoV2Base ?? dados.mistoValor2;
+    const taxaPct = getMistoTaxa();
+
+    // Receita real da parte 1
+    let receita1 = v1Base;
+    if (dados.mistoForma1 === 'Cartão' && taxaPct > 0) {
+      // Sem repasse: lojista perde a taxa sobre v1Base
+      // Com repasse: cliente pagou a taxa, lojista recebe v1Base inteiro
+      if (!window._mistoRepasse1) receita1 = v1Base * (1 - taxaPct / 100);
+    }
+
+    // Receita real da parte 2
+    let receita2 = v2Base;
+    if (dados.mistoForma2 === 'Cartão' && taxaPct > 0) {
+      if (!window._mistoRepasse2) receita2 = v2Base * (1 - taxaPct / 100);
+    }
+
+    valorLiquido = receita1 + receita2;
+    valorBruto = (window._mistoV1Cobrado ?? v1Base) + (window._mistoV2Cobrado ?? v2Base);
+  }
+
   total = valorLiquido; // total passa a representar a receita real
 
   // Promissória: pagamento sempre fica pendente até as parcelas serem pagas
