@@ -2374,8 +2374,6 @@ function atualizarMargemPreview() {
         custoTaxa = 0;
       }
     }
-    // Atualiza campo 2 e hint do misto
-    onMistoValorChange();
   }
 
   // Margem considera custo dos produtos + custo da taxa absorvida pelo lojista
@@ -2715,6 +2713,12 @@ function onMistoValorChange() {
     const repTag2 = r2 ? ` <span style="color:var(--blue);font-size:10px">(+${taxaPct2}% rep.)</span>` : '';
     const totalCobrado = v1Cobrado + v2Cobrado;
     hint.innerHTML = `✅ ${icone1} ${f1}${tag1}${repTag1}: <strong>R$ ${f(v1Cobrado)}</strong> + ${icone2} ${f2}${tag2}${repTag2}: <strong>R$ ${f(v2Cobrado)}</strong> = Cliente paga: <strong>R$ ${f(totalCobrado)}</strong>`;
+  }
+  // Atualiza margem preview sem recursão
+  if (!window._mistoUpdating) {
+    window._mistoUpdating = true;
+    atualizarMargemPreview();
+    window._mistoUpdating = false;
   }
 }
 
@@ -6627,3 +6631,4 @@ init();
 </script>
 </body>
 </html>
+  
