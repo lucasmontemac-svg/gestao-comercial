@@ -1658,7 +1658,7 @@ async function renderVendas(c) {
       </div>
       <!-- PAGAMENTO MISTO -->
       <div id="campo-pagamento-misto" style="display:none;grid-column:span 2">
-        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:14px;display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:end">
+        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:14px;display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:start">
           <div>
             <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px">1ª Forma</label>
             <select id="v-misto-forma1" onchange="onMistoChange()" style="width:100%;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;color:var(--gray-800);outline:none;background:var(--white)">
@@ -1669,17 +1669,37 @@ async function renderVendas(c) {
             <input type="number" id="v-misto-valor1" placeholder="R$ 0,00" min="0" step="0.01"
               oninput="onMistoValorChange()"
               style="width:100%;margin-top:6px;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;outline:none">
+            <!-- Toggle repasse forma 1 -->
+            <div id="misto-repasse1-wrap" style="display:none;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:7px;cursor:pointer" onclick="toggleMistoRepasse(1)">
+                <div style="position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0">
+                  <span id="misto-repasse1-track" style="position:absolute;inset:0;border-radius:20px;background:var(--gray-200);transition:background .2s;display:block"></span>
+                  <span id="misto-repasse1-thumb" style="position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);display:block"></span>
+                </div>
+                <span style="font-size:11px;color:var(--gray-600);font-weight:600">Repassar taxa ao cliente</span>
+              </div>
+            </div>
           </div>
-          <div style="text-align:center;padding-bottom:10px;color:var(--gray-400);font-weight:700;font-size:18px">+</div>
+          <div style="text-align:center;padding-top:38px;color:var(--gray-400);font-weight:700;font-size:18px">+</div>
           <div>
             <label style="display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px">2ª Forma</label>
-            <select id="v-misto-forma2" style="width:100%;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;color:var(--gray-800);outline:none;background:var(--white)">
+            <select id="v-misto-forma2" onchange="onMistoChange()" style="width:100%;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;color:var(--gray-800);outline:none;background:var(--white)">
               <option value="PIX">📱 PIX</option>
               <option value="Dinheiro">💵 Dinheiro</option>
               <option value="Cartão">💳 Cartão</option>
             </select>
             <input type="number" id="v-misto-valor2" placeholder="R$ 0,00" min="0" step="0.01" readonly
               style="width:100%;margin-top:6px;border:1px solid var(--gray-200);border-radius:8px;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--gray-100);color:var(--gray-600)">
+            <!-- Toggle repasse forma 2 -->
+            <div id="misto-repasse2-wrap" style="display:none;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:7px;cursor:pointer" onclick="toggleMistoRepasse(2)">
+                <div style="position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0">
+                  <span id="misto-repasse2-track" style="position:absolute;inset:0;border-radius:20px;background:var(--gray-200);transition:background .2s;display:block"></span>
+                  <span id="misto-repasse2-thumb" style="position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);display:block"></span>
+                </div>
+                <span style="font-size:11px;color:var(--gray-600);font-weight:600">Repassar taxa ao cliente</span>
+              </div>
+            </div>
           </div>
         </div>
         <div id="misto-hint" style="font-size:11px;color:var(--gray-400);margin-top:6px;padding:0 2px">💡 Digite o valor da 1ª forma — o restante é calculado automaticamente para a 2ª.</div>
@@ -2477,6 +2497,11 @@ function onFormaPagamentoChange() {
     if (track) track.style.background = 'var(--gray-200)';
     if (thumb) thumb.style.left = '2px';
   }
+  // Reset dos toggles de repasse do misto ao sair de Misto
+  if (forma !== 'Misto') {
+    window._mistoRepasse1 = false; window._mistoRepasse2 = false;
+    window._mistoV1Cobrado = 0; window._mistoV2Cobrado = 0;
+  }
   if (campoParc) campoParc.style.display = forma==='Promissória' ? 'block' : 'none';
   if (campoMisto) campoMisto.style.display = forma==='Misto' ? 'block' : 'none';
 
@@ -2497,6 +2522,27 @@ function onFormaPagamentoChange() {
   atualizarMargemPreview();
 }
 
+// Estados dos toggles de repasse no misto
+window._mistoRepasse1 = false;
+window._mistoRepasse2 = false;
+
+function toggleMistoRepasse(n) {
+  if (n === 1) {
+    window._mistoRepasse1 = !window._mistoRepasse1;
+    const track = document.getElementById('misto-repasse1-track');
+    const thumb = document.getElementById('misto-repasse1-thumb');
+    if (track) track.style.background = window._mistoRepasse1 ? 'var(--green)' : 'var(--gray-200)';
+    if (thumb) thumb.style.left = window._mistoRepasse1 ? '16px' : '2px';
+  } else {
+    window._mistoRepasse2 = !window._mistoRepasse2;
+    const track = document.getElementById('misto-repasse2-track');
+    const thumb = document.getElementById('misto-repasse2-thumb');
+    if (track) track.style.background = window._mistoRepasse2 ? 'var(--green)' : 'var(--gray-200)';
+    if (thumb) thumb.style.left = window._mistoRepasse2 ? '16px' : '2px';
+  }
+  onMistoValorChange();
+}
+
 function onMistoChange() {
   // Garante que as duas formas sejam diferentes
   const f1 = document.getElementById('v-misto-forma1')?.value;
@@ -2505,25 +2551,69 @@ function onMistoChange() {
     const opts = ['Dinheiro','PIX','Cartão'].filter(o=>o!==f1);
     f2el.value = opts[0];
   }
+  const f2 = document.getElementById('v-misto-forma2')?.value;
+  // Mostra/esconde toggles de repasse conforme a forma selecionada
+  const wrap1 = document.getElementById('misto-repasse1-wrap');
+  const wrap2 = document.getElementById('misto-repasse2-wrap');
+  if (wrap1) wrap1.style.display = f1 === 'Cartão' ? 'block' : 'none';
+  if (wrap2) wrap2.style.display = f2 === 'Cartão' ? 'block' : 'none';
+  // Reseta os toggles ao trocar de forma
+  if (f1 !== 'Cartão') { window._mistoRepasse1 = false; const tr=document.getElementById('misto-repasse1-track'); const th=document.getElementById('misto-repasse1-thumb'); if(tr)tr.style.background='var(--gray-200)'; if(th)th.style.left='2px'; }
+  if (f2 !== 'Cartão') { window._mistoRepasse2 = false; const tr=document.getElementById('misto-repasse2-track'); const th=document.getElementById('misto-repasse2-thumb'); if(tr)tr.style.background='var(--gray-200)'; if(th)th.style.left='2px'; }
   onMistoValorChange();
 }
 
+function getMistoTaxa() {
+  // Retorna taxa configurada para 1x no cartão (misto usa sempre à vista)
+  const taxas = getTaxasMaquineta();
+  return Number(taxas[1]||0);
+}
+
 function onMistoValorChange() {
-  const v1 = parseFloat(document.getElementById('v-misto-valor1')?.value)||0;
+  const v1Input = parseFloat(document.getElementById('v-misto-valor1')?.value)||0;
+  const f1 = document.getElementById('v-misto-forma1')?.value||'';
+  const f2 = document.getElementById('v-misto-forma2')?.value||'';
   const sel = window._produtosSelecionados||[];
   const subtotal = sel.reduce((a,p)=>a+(p.bonificacao||p._isBoni?0:Number(p.venda)*(p.qty||1)),0);
   const descPct = getDescontoPct(subtotal);
-  const total = subtotal*(1-descPct/100);
-  const v2 = Math.max(0, total - v1);
+  const total = subtotal*(1-descPct/100); // total base dos produtos
+
+  const taxaPct = getMistoTaxa();
+
+  // Se a forma 1 é cartão com repasse: v1Input é o valor base → cobrado = v1Input/(1-taxa%)
+  // Se a forma 1 é cartão sem repasse: v1Input já é o valor cobrado
+  // O valor base descontado do total para calcular v2 é sempre o valor que o lojista recebe
+  const r1 = f1 === 'Cartão' && window._mistoRepasse1 && taxaPct > 0;
+  const r2 = f2 === 'Cartão' && window._mistoRepasse2 && taxaPct > 0;
+
+  // v1Base = quanto do total é alocado para a forma 1 (em valor de produto)
+  const v1Base = v1Input; // usuário digita o valor base sempre
+  const v1Cobrado = (r1 && taxaPct > 0) ? v1Base / (1 - taxaPct/100) : v1Base;
+
+  const v2Base = Math.max(0, total - v1Base);
+  const v2Cobrado = (r2 && taxaPct > 0) ? v2Base / (1 - taxaPct/100) : v2Base;
+
+  // Mostra no campo 2 o valor cobrado ao cliente (o que ele vai pagar de fato)
   const el2 = document.getElementById('v-misto-valor2');
-  if (el2) el2.value = v2.toFixed(2);
+  if (el2) el2.value = v2Cobrado.toFixed(2);
+
+  // Guarda para uso no concretizarVenda
+  window._mistoV1Cobrado = v1Cobrado;
+  window._mistoV2Cobrado = v2Cobrado;
+  window._mistoV1Base = v1Base;
+  window._mistoV2Base = v2Base;
+
   const hint = document.getElementById('misto-hint');
   if (hint && total > 0) {
-    const f1 = document.getElementById('v-misto-forma1')?.value||'';
-    const f2 = document.getElementById('v-misto-forma2')?.value||'';
-    hint.innerHTML = v1 > total
-      ? '⚠️ Valor da 1ª forma maior que o total da venda!'
-      : `✅ ${f1}: <strong>R$ ${f(v1)}</strong> + ${f2}: <strong>R$ ${f(v2)}</strong> = Total: <strong>R$ ${f(total)}</strong>`;
+    if (v1Base > total) {
+      hint.innerHTML = '⚠️ Valor da 1ª forma maior que o total da venda!';
+      return;
+    }
+    // Monta linha resumo
+    const label1 = r1 ? `${f1} <span style="color:var(--blue);font-size:10px">(+${taxaPct}% rep.)</span> R$ ${f(v1Cobrado)}` : `${f1}: R$ ${f(v1Cobrado)}`;
+    const label2 = r2 ? `${f2} <span style="color:var(--blue);font-size:10px">(+${taxaPct}% rep.)</span> R$ ${f(v2Cobrado)}` : `${f2}: R$ ${f(v2Cobrado)}`;
+    const totalCobrado = v1Cobrado + v2Cobrado;
+    hint.innerHTML = `✅ ${label1} + ${label2} = Cliente paga: <strong>R$ ${f(totalCobrado)}</strong>`;
   }
 }
 
@@ -3085,9 +3175,14 @@ function coletarDadosVenda() {
   if (formaPgto === 'Misto') {
     mistoForma1 = document.getElementById('v-misto-forma1')?.value||'Dinheiro';
     mistoForma2 = document.getElementById('v-misto-forma2')?.value||'PIX';
-    mistoValor1 = parseFloat(document.getElementById('v-misto-valor1')?.value)||0;
-    mistoValor2 = parseFloat(document.getElementById('v-misto-valor2')?.value)||0;
-    formaPgtoFinal = `Misto (${mistoForma1} + ${mistoForma2})`;
+    // Usa os valores cobrados ao cliente (já com repasse aplicado se ativo)
+    mistoValor1 = window._mistoV1Cobrado ?? (parseFloat(document.getElementById('v-misto-valor1')?.value)||0);
+    mistoValor2 = window._mistoV2Cobrado ?? (parseFloat(document.getElementById('v-misto-valor2')?.value)||0);
+    const rep1 = mistoForma1==='Cartão' && (window._mistoRepasse1||false);
+    const rep2 = mistoForma2==='Cartão' && (window._mistoRepasse2||false);
+    const repTag1 = rep1 ? ' c/repasse' : '';
+    const repTag2 = rep2 ? ' c/repasse' : '';
+    formaPgtoFinal = `Misto (${mistoForma1}${repTag1} + ${mistoForma2}${repTag2})`;
   }
 
   // Separa itens normais e bonificações
@@ -3179,7 +3274,7 @@ async function concretizarVenda(dados) {
 
   // Se misto, acrescenta detalhe dos valores na observação interna
   const obsFinal = (dados.formaPgto&&dados.formaPgto.startsWith('Misto'))
-    ? `${dados.obs ? dados.obs + ' | ' : ''}Pgto misto: ${dados.mistoForma1} R$${f(dados.mistoValor1)} + ${dados.mistoForma2} R$${f(dados.mistoValor2)}`
+    ? `${dados.obs ? dados.obs + ' | ' : ''}Pgto misto: ${dados.mistoForma1} R$${f(dados.mistoValor1)} + ${dados.mistoForma2} R$${f(dados.mistoValor2)} (total cliente: R$${f(dados.mistoValor1+dados.mistoValor2)})`
     : dados.obs;
 
   const { data: vendaInserida, error } = await sb.from('vendas').insert({
@@ -6406,4 +6501,3 @@ init();
 </script>
 </body>
 </html>
-  
