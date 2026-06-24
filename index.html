@@ -2331,21 +2331,26 @@ function atualizarMargemPreview() {
     valorCobrado = repassar ? (window._cartaoValorCobrado||valorBruto) : valorBruto;
     valorLiquido = valorCobrado * (1 - taxaPct/100);
   } else if (forma === 'Misto') {
-    // Calcula receita real considerando taxa do cartão nas partes que usam cartão
+    // Recalcula diretamente dos DOM elements — não depende de variáveis globais desatualizadas
     const f1 = document.getElementById('v-misto-forma1')?.value||'';
     const f2 = document.getElementById('v-misto-forma2')?.value||'';
-    const tMisto1 = window._mistoTaxaPct1 || 0;
-    const tMisto2 = window._mistoTaxaPct2 || 0;
-    const v1Base = window._mistoV1Base || 0;
-    const v2Base = window._mistoV2Base || 0;
-    const r1 = f1==='Cartão' && window._mistoRepasse1;
-    const r2 = f2==='Cartão' && window._mistoRepasse2;
-    let receita1 = v1Base;
-    let receita2 = v2Base;
-    if (f1==='Cartão' && tMisto1>0 && !r1) receita1 = v1Base*(1-tMisto1/100);
-    if (f2==='Cartão' && tMisto2>0 && !r2) receita2 = v2Base*(1-tMisto2/100);
+    // Taxa real por parcela selecionada em cada forma
+    const taxas = getTaxasMaquineta();
+    const parc1 = parseInt(document.getElementById('v-misto-parcelas1')?.value)||1;
+    const parc2 = parseInt(document.getElementById('v-misto-parcelas2')?.value)||1;
+    const tMisto1 = f1==='Cartão' ? Number(taxas[parc1]||0) : 0;
+    const tMisto2 = f2==='Cartão' ? Number(taxas[parc2]||0) : 0;
+    // Valor base de cada parte (quanto do produto está alocado para cada forma)
+    const v1Input = parseFloat(document.getElementById('v-misto-valor1')?.value)||0;
+    const v1Base  = v1Input;
+    const v2Base  = Math.max(0, valorBruto - v1Base);
+    const r1 = f1==='Cartão' && (window._mistoRepasse1||false);
+    const r2 = f2==='Cartão' && (window._mistoRepasse2||false);
+    // Receita real = valorBase se repasse ativo, senão desconta a taxa
+    const receita1 = (f1==='Cartão' && tMisto1>0 && !r1) ? v1Base*(1-tMisto1/100) : v1Base;
+    const receita2 = (f2==='Cartão' && tMisto2>0 && !r2) ? v2Base*(1-tMisto2/100) : v2Base;
     valorLiquido = receita1 + receita2;
-    valorCobrado = (window._mistoV1Cobrado||v1Base) + (window._mistoV2Cobrado||v2Base);
+    valorCobrado = (r1 ? v1Base/(1-tMisto1/100) : v1Base) + (r2 ? v2Base/(1-tMisto2/100) : v2Base);
     const taxaAbsorvida = valorBruto - valorLiquido;
     if ((tMisto1>0||tMisto2>0) && (f1==='Cartão'||f2==='Cartão')) {
       if (taxaAbsorvida > 0.001) {
