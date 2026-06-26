@@ -25,26 +25,49 @@
   @keyframes spin{to{transform:rotate(360deg);}}
   #loading-screen p{color:rgba(255,255,255,0.5);font-size:13px;}
 
-  /* LOGIN */
-  #login-screen{min-height:100vh;display:none;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 50%,#0D3460 100%);position:relative;overflow:hidden;}
-  #login-screen::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(46,117,182,0.15) 0%,transparent 70%);top:-100px;right:-100px;}
-  .login-card{background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:48px 40px;width:420px;position:relative;z-index:1;}
-  .login-logo{display:flex;align-items:center;gap:12px;margin-bottom:36px;}
-  .login-logo-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;}
-  .login-logo-icon img{width:100%;height:100%;object-fit:contain;}
-  .login-logo h1{font-family:'Sora',sans-serif;font-size:20px;font-weight:700;color:var(--white);}
-  .login-logo span{font-size:11px;color:rgba(255,255,255,0.5);display:block;margin-top:1px;}
-  .login-title{font-family:'Sora',sans-serif;font-size:26px;font-weight:700;color:var(--white);margin-bottom:8px;}
-  .login-sub{font-size:14px;color:rgba(255,255,255,0.5);margin-bottom:32px;}
-  .login-field{margin-bottom:16px;}
-  .login-field label{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,0.7);margin-bottom:8px;letter-spacing:.5px;text-transform:uppercase;}
-  .login-field input{width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:12px 16px;color:var(--white);font-size:14px;font-family:'Inter',sans-serif;transition:all .2s;outline:none;}
-  .login-field input:focus{border-color:var(--blue-light);background:rgba(255,255,255,0.12);}
-  .login-field input::placeholder{color:rgba(255,255,255,0.3);}
-  .login-btn{width:100%;background:var(--blue);border:none;border-radius:10px;padding:14px;color:var(--white);font-size:15px;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;margin-top:8px;transition:all .2s;}
-  .login-btn:hover{background:var(--blue-light);transform:translateY(-1px);box-shadow:0 8px 24px rgba(46,117,182,0.4);}
-  .login-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
-  .login-error{background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;color:#FCA5A5;font-size:13px;margin-top:12px;display:none;}
+  /* LOGIN — split layout */
+  #login-screen{min-height:100vh;display:none;align-items:stretch;justify-content:stretch;background:#0B1828;position:relative;overflow:hidden;}
+  /* Painel esquerdo — proposta de valor */
+  .login-left{flex:1;background:linear-gradient(145deg,#0B1828 0%,#0F2744 60%,#0A1F3A 100%);display:flex;flex-direction:column;justify-content:space-between;padding:48px 52px;position:relative;overflow:hidden;min-height:100vh;}
+  .login-left::before{content:'';position:absolute;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(46,117,182,0.12) 0%,transparent 65%);bottom:-80px;left:-80px;pointer-events:none;}
+  .login-left::after{content:'';position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,0.08) 0%,transparent 65%);top:60px;right:40px;pointer-events:none;}
+  .ll-logo{display:flex;align-items:center;gap:12px;position:relative;z-index:1;}
+  .ll-logo-icon{width:42px;height:42px;border-radius:10px;overflow:hidden;background:#1A3A5C;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .ll-logo-icon img{width:100%;height:100%;object-fit:contain;}
+  .ll-logo-text h1{font-family:'Sora',sans-serif;font-size:16px;font-weight:700;color:#fff;line-height:1.2;}
+  .ll-logo-text span{font-size:10px;color:rgba(255,255,255,0.4);font-weight:500;letter-spacing:.3px;}
+  .ll-hero{position:relative;z-index:1;margin-top:auto;padding-bottom:8px;}
+  .ll-eyebrow{font-size:11px;font-weight:700;color:#F59E0B;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:8px;}
+  .ll-eyebrow::before{content:'';display:block;width:24px;height:2px;background:#F59E0B;border-radius:2px;}
+  .ll-headline{font-family:'Sora',sans-serif;font-size:36px;font-weight:800;color:#fff;line-height:1.2;margin-bottom:20px;}
+  .ll-headline em{color:#F59E0B;font-style:normal;}
+  .ll-desc{font-size:14px;color:rgba(255,255,255,0.5);line-height:1.7;margin-bottom:40px;max-width:360px;}
+  .ll-features{display:flex;flex-direction:column;gap:14px;}
+  .ll-feature{display:flex;align-items:center;gap:12px;}
+  .ll-feature-dot{width:6px;height:6px;border-radius:50%;background:#F59E0B;flex-shrink:0;}
+  .ll-feature span{font-size:13px;color:rgba(255,255,255,0.65);font-weight:500;}
+  .ll-footer{font-size:11px;color:rgba(255,255,255,0.2);position:relative;z-index:1;padding-top:24px;border-top:1px solid rgba(255,255,255,0.06);}
+  /* Painel direito — formulário */
+  .login-right{width:440px;flex-shrink:0;background:#fff;display:flex;align-items:center;justify-content:center;padding:48px 40px;min-height:100vh;}
+  .login-card{width:100%;max-width:340px;}
+  .login-card-header{margin-bottom:36px;}
+  .login-card-header h2{font-family:'Sora',sans-serif;font-size:24px;font-weight:800;color:#0B1828;margin-bottom:6px;}
+  .login-card-header p{font-size:14px;color:#64748B;}
+  .login-field{margin-bottom:18px;}
+  .login-field label{display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:7px;letter-spacing:.6px;text-transform:uppercase;}
+  .login-field input{width:100%;background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:10px;padding:12px 14px;color:#0B1828;font-size:14px;font-family:'Inter',sans-serif;transition:all .2s;outline:none;}
+  .login-field input:focus{border-color:#2E75B6;background:#fff;box-shadow:0 0 0 3px rgba(46,117,182,0.08);}
+  .login-field input::placeholder{color:#CBD5E1;}
+  .login-btn{width:100%;background:#0B1828;border:none;border-radius:10px;padding:14px;color:#fff;font-size:14px;font-weight:700;font-family:'Sora',sans-serif;cursor:pointer;margin-top:6px;transition:all .2s;letter-spacing:.3px;}
+  .login-btn:hover{background:#2E75B6;transform:translateY(-1px);box-shadow:0 8px 24px rgba(11,24,40,0.2);}
+  .login-btn:disabled{opacity:.55;cursor:not-allowed;transform:none;}
+  .login-error{background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 14px;color:#DC2626;font-size:13px;margin-top:12px;display:none;}
+  /* Responsive */
+  @media(max-width:768px){
+    #login-screen{flex-direction:column;}
+    .login-left{display:none;}
+    .login-right{width:100%;min-height:100vh;padding:36px 24px;}
+  }
 
   /* APP */
   #app{display:none;height:100vh;}
@@ -71,6 +94,16 @@
   .nav-item:hover{background:rgba(255,255,255,0.05);color:var(--white);}
   .nav-item.active{background:rgba(46,117,182,0.2);color:var(--white);border-left-color:var(--blue);}
   .nav-item .icon{font-size:16px;width:20px;text-align:center;}
+  .nav-group-header{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;transition:all .15s;color:rgba(255,255,255,0.75);font-size:13px;font-weight:600;user-select:none;}
+  .nav-group-header:hover{background:rgba(255,255,255,0.04);color:var(--white);}
+  .nav-group-header .icon{font-size:16px;width:20px;text-align:center;}
+  .nav-group-header .chevron{margin-left:auto;font-size:10px;transition:transform .2s;color:rgba(255,255,255,0.3);}
+  .nav-group-header.open .chevron{transform:rotate(90deg);}
+  .nav-group-body{overflow:hidden;max-height:0;transition:max-height .25s ease;}
+  .nav-group-body.open{max-height:500px;}
+  .nav-sub-item{display:flex;align-items:center;gap:10px;padding:8px 20px 8px 36px;cursor:pointer;transition:all .15s;color:rgba(255,255,255,0.45);font-size:12.5px;border-left:3px solid transparent;margin:1px 0;}
+  .nav-sub-item:hover{background:rgba(255,255,255,0.05);color:var(--white);}
+  .nav-sub-item.active{background:rgba(46,117,182,0.15);color:var(--white);border-left-color:var(--blue);}
   .sidebar-bottom{padding:16px 20px;border-top:1px solid rgba(255,255,255,0.07);}
   .expiry-badge{background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:8px 12px;}
   .expiry-badge p{font-size:10px;color:rgba(255,255,255,0.4);}
@@ -214,7 +247,7 @@
     [style*="grid-template-columns:1fr 1fr"] { grid-template-columns:1fr 1fr !important; }
 
     /* Login */
-    .login-card { width:95vw; padding:28px 20px; }
+    .login-card { width:90%; }
     .demo-btns { flex-direction:column; }
   }
 
@@ -247,27 +280,47 @@
 </div>
 
 <!-- LOGIN -->
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">
-      <div class="login-logo-icon"><img src="data:image/png;base64,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" alt="MG Monte Gerencialize"></div>
-      <div>
-        <h1>Gestão Comercial</h1>
-        <span>Sistema profissional de gestão</span>
+<div id="login-screen" style="display:none;flex-direction:row">
+  <!-- Painel esquerdo -->
+  <div class="login-left">
+    <div class="ll-logo">
+      <div class="ll-logo-icon"><img src="data:image/png;base64,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" alt="Monte Gerencialize"></div>
+      <div class="ll-logo-text">
+        <h1>Monte Gerencialize</h1>
+        <span>Gestão Comercial Pro</span>
       </div>
     </div>
-    <h2 class="login-title">Bem-vindo de volta</h2>
-    <p class="login-sub">Faça login para acessar seu painel</p>
-    <div class="login-field">
-      <label>E-mail</label>
-      <input type="email" id="login-email" placeholder="seu@email.com">
+    <div class="ll-hero">
+      <div class="ll-eyebrow">Para comércio e serviços</div>
+      <h2 class="ll-headline">Controle total do<br>seu <em>negócio</em></h2>
+      <p class="ll-desc">Vendas, estoque, clientes, finanças e relatórios em um só lugar. Simples, rápido e feito para o dia a dia do comerciante brasileiro.</p>
+      <div class="ll-features">
+        <div class="ll-feature"><div class="ll-feature-dot"></div><span>Controle de vendas com múltiplas formas de pagamento</span></div>
+        <div class="ll-feature"><div class="ll-feature-dot"></div><span>DRE e margem de lucro em tempo real</span></div>
+        <div class="ll-feature"><div class="ll-feature-dot"></div><span>Gestão de estoque e clientes integrada</span></div>
+        <div class="ll-feature"><div class="ll-feature-dot"></div><span>Orçamentos e pedidos de venda</span></div>
+      </div>
     </div>
-    <div class="login-field">
-      <label>Senha</label>
-      <input type="password" id="login-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="ll-footer">© 2025 Monte Gerencialize · Todos os direitos reservados</div>
+  </div>
+  <!-- Painel direito -->
+  <div class="login-right">
+    <div class="login-card">
+      <div class="login-card-header">
+        <h2>Bem-vindo de volta</h2>
+        <p>Acesse sua conta para continuar</p>
+      </div>
+      <div class="login-field">
+        <label>E-mail</label>
+        <input type="email" id="login-email" placeholder="seu@email.com" autocomplete="email">
+      </div>
+      <div class="login-field">
+        <label>Senha</label>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="login-btn" id="login-btn" onclick="doLogin()">Entrar no sistema →</button>
+      <div class="login-error" id="login-error"></div>
     </div>
-    <button class="login-btn" id="login-btn" onclick="doLogin()">Entrar no sistema →</button>
-    <div class="login-error" id="login-error"></div>
   </div>
 </div>
 
@@ -320,13 +373,13 @@
       <span class="bnav-icon">📊</span><span>Dashboard</span>
     </div>
     <div class="bnav-item" id="bnav-estoque" onclick="navigate('estoque');setActiveNav('estoque')">
-      <span class="bnav-icon">📦</span><span>Estoque</span>
+      <span class="bnav-icon">📂</span><span>Cadastro</span>
     </div>
     <div class="bnav-item" id="bnav-vendas" onclick="navigate('vendas');setActiveNav('vendas')">
       <span class="bnav-icon">🧾</span><span>Vendas</span>
     </div>
-    <div class="bnav-item" id="bnav-resumo" onclick="navigate('resumo');setActiveNav('resumo')">
-      <span class="bnav-icon">💰</span><span>Resumo</span>
+    <div class="bnav-item" id="bnav-resumo" onclick="navigate('despesas');setActiveNav('despesas')">
+      <span class="bnav-icon">💸</span><span>Despesas</span>
     </div>
     <div class="bnav-item" id="bnav-more" onclick="toggleMobileMenu()">
       <span class="bnav-icon">☰</span><span>Mais</span>
@@ -335,12 +388,19 @@
 
   <!-- MOBILE MENU (mais opções) -->
   <div id="mobile-menu" style="display:none;position:fixed;bottom:60px;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,.1);z-index:99;padding:8px 0;">
-    <div onclick="navigate('pedidos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📋 Orçamento</div>
-    <div onclick="navigate('clientes');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">👤 Clientes</div>
-    <div onclick="navigate('precos');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📈 Comparativo</div>
-    <div onclick="navigate('precif');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💲 Precificação</div>
-    <div onclick="navigate('despesas');toggleMobileMenu()" style="padding:14px 20px;color:rgba(255,255,255,.8);font-size:14px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">💸 Despesas</div>
-    <div onclick="doLogout()" style="padding:14px 20px;color:rgba(239,68,68,.8);font-size:14px;cursor:pointer">🚪 Sair</div>
+    <div style="padding:8px 20px 4px;font-size:10px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:1px">CADASTRO</div>
+    <div onclick="navigate('produtos');toggleMobileMenu()"  style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">🏷️ Produtos</div>
+    <div onclick="navigate('estoque');toggleMobileMenu()"   style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">📦 Estoque</div>
+    <div onclick="navigate('clientes');toggleMobileMenu()" style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">👤 Clientes</div>
+    <div onclick="navigate('empresa');toggleMobileMenu()"  style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">🏢 Empresa</div>
+    <div style="padding:8px 20px 4px;font-size:10px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:1px">VENDAS</div>
+    <div onclick="navigate('vendas');toggleMobileMenu()"     style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">🧾 Lançamento de Venda</div>
+    <div onclick="navigate('pedidos');toggleMobileMenu()"    style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">📋 Orçamento</div>
+    <div onclick="navigate('resumo');toggleMobileMenu()"     style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">💰 Controle de Vendas</div>
+    <div onclick="navigate('precos');toggleMobileMenu()"     style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">📈 Comparativo</div>
+    <div onclick="navigate('precif');toggleMobileMenu()"     style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">💲 Precificação</div>
+    <div onclick="navigate('emissao-nf');toggleMobileMenu()" style="padding:12px 20px 12px 32px;color:rgba(255,255,255,.8);font-size:13px;border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer">📄 Emissão de NF</div>
+    <div onclick="doLogout()" style="padding:12px 20px;color:rgba(239,68,68,.8);font-size:14px;cursor:pointer">🚪 Sair</div>
   </div>
 </div>
 
@@ -530,33 +590,51 @@ function setupApp() {
 
   const isAdmin = p.role === 'admin';
   const nav = document.getElementById('sidebar-nav');
-  const clientItems = [
-    {id:'dashboard',icon:'📊',label:'Dashboard'},
-    {id:'estoque',  icon:'📦',label:'Estoque'},
-    {id:'vendas',   icon:'🧾',label:'Venda Detalhada'},
-    {id:'pedidos',  icon:'📋',label:'Orçamento'},
-    {id:'clientes', icon:'👤',label:'Clientes'},
-    {id:'resumo',   icon:'💰',label:'Controle de Vendas'},
-    {id:'precos',   icon:'📈',label:'Comparativo'},
-    {id:'precif',   icon:'💲',label:'Precificação'},
-    {id:'despesas', icon:'💸',label:'Despesas'},
-  ];
-  const adminItems = [
-    {id:'admin-dash',   icon:'🏠',label:'Painel Admin'},
-    {id:'admin-clients',icon:'👥',label:'Clientes'},
-    {id:'admin-acessos',icon:'🔐',label:'Controle de Acesso'},
-    {id:'admin-planos', icon:'💳',label:'Planos'},
-  ];
-
   nav.innerHTML = '';
+
   if (isAdmin) {
     nav.innerHTML += `<div class="nav-section">Admin</div>`;
-    adminItems.forEach(i => nav.innerHTML += navItem(i));
+    [{id:'admin-dash',icon:'🏠',label:'Painel Admin'},{id:'admin-clients',icon:'👥',label:'Clientes'},
+     {id:'admin-acessos',icon:'🔐',label:'Controle de Acesso'},{id:'admin-planos',icon:'💳',label:'Planos'}]
+      .forEach(i => nav.innerHTML += navItem(i));
     nav.innerHTML += `<div class="nav-section" style="margin-top:8px">Módulos</div>`;
-  } else {
-    nav.innerHTML += `<div class="nav-section">Módulos</div>`;
   }
-  clientItems.forEach(i => nav.innerHTML += navItem(i));
+
+  // Dashboard (item direto)
+  nav.innerHTML += navItem({id:'dashboard', icon:'📊', label:'Dashboard'});
+
+  // Grupo: Cadastro
+  nav.innerHTML += `
+  <div class="nav-group" id="group-cadastro">
+    <div class="nav-group-header" onclick="toggleNavGroup('cadastro')">
+      <span class="icon">📂</span><span>Cadastro</span><span class="chevron">▶</span>
+    </div>
+    <div class="nav-group-body" id="group-body-cadastro">
+      ${navSubItem({id:'produtos',  icon:'🏷️', label:'Produtos'})}
+      ${navSubItem({id:'estoque',   icon:'📦', label:'Estoque'})}
+      ${navSubItem({id:'clientes',  icon:'👤', label:'Clientes'})}
+      ${navSubItem({id:'empresa',   icon:'🏢', label:'Empresa'})}
+    </div>
+  </div>`;
+
+  // Grupo: Vendas
+  nav.innerHTML += `
+  <div class="nav-group" id="group-vendas">
+    <div class="nav-group-header" onclick="toggleNavGroup('vendas')">
+      <span class="icon">🧾</span><span>Vendas</span><span class="chevron">▶</span>
+    </div>
+    <div class="nav-group-body" id="group-body-vendas">
+      ${navSubItem({id:'vendas',     icon:'🧾', label:'Lançamento de Venda'})}
+      ${navSubItem({id:'pedidos',    icon:'📋', label:'Orçamento'})}
+      ${navSubItem({id:'resumo',     icon:'💰', label:'Controle de Vendas'})}
+      ${navSubItem({id:'precos',     icon:'📈', label:'Comparativo'})}
+      ${navSubItem({id:'precif',     icon:'💲', label:'Precificação'})}
+      ${(isAdmin || p.nf_habilitado) ? navSubItem({id:'emissao-nf', icon:'📄', label:'Emissão de NF'}) : ''}
+    </div>
+  </div>`;
+
+  // Despesas (item direto)
+  nav.innerHTML += navItem({id:'despesas', icon:'💸', label:'Despesas'});
 
   document.getElementById('app').style.display = 'flex';
   navigate(isAdmin ? 'admin-dash' : 'dashboard');
@@ -564,6 +642,19 @@ function setupApp() {
 
 function navItem(i) {
   return `<div class="nav-item" id="nav-${i.id}" onclick="navigate('${i.id}')"><span class="icon">${i.icon}</span><span>${i.label}</span></div>`;
+}
+
+function navSubItem(i) {
+  return `<div class="nav-sub-item" id="nav-${i.id}" onclick="navigate('${i.id}')"><span class="icon">${i.icon}</span><span>${i.label}</span></div>`;
+}
+
+function toggleNavGroup(grupo) {
+  const header = document.querySelector(`#group-${grupo} .nav-group-header`);
+  const body   = document.getElementById(`group-body-${grupo}`);
+  if (!header || !body) return;
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  header.classList.toggle('open', !isOpen);
 }
 
 // ── LOGO DA EMPRESA (definida pelo próprio usuário/cliente) ──────────
@@ -614,26 +705,56 @@ async function processarLogoEmpresa(input) {
 // NAVIGATE
 // ══════════════════════════════════════════════════════
 const TITLES = {
-  dashboard:'Dashboard', estoque:'📦 Controle de Estoque', vendas:'🧾 Venda Detalhada',
-  pedidos:'📋 Orçamento',
-  clientes:'👤 Clientes', resumo:'💰 Controle de Vendas', precos:'📈 Comparativo de Preços', precif:'💲 Precificação',
-  despesas:'💸 Despesas', 'admin-dash':'Painel Administrativo', 'admin-clients':'Clientes',
+  dashboard:'Dashboard',
+  produtos:'🏷️ Produtos', estoque:'📦 Estoque', clientes:'👤 Clientes', empresa:'🏢 Dados da Empresa',
+  vendas:'🧾 Lançamento de Venda', pedidos:'📋 Orçamento',
+  resumo:'💰 Controle de Vendas', precos:'📈 Comparativo de Preços', precif:'💲 Precificação',
+  'emissao-nf':'📄 Emissão de Nota Fiscal',
+  despesas:'💸 Despesas',
+  'admin-dash':'Painel Administrativo', 'admin-clients':'Clientes',
   'admin-acessos':'Controle de Acesso', 'admin-planos':'Planos e Cobranças'
+};
+
+const VIEW_GROUP = {
+  produtos:'cadastro', estoque:'cadastro', clientes:'cadastro', empresa:'cadastro',
+  vendas:'vendas', pedidos:'vendas', resumo:'vendas',
+  precos:'vendas', precif:'vendas', 'emissao-nf':'vendas',
 };
 
 async function navigate(view) {
   window._currentView = view;
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item,.nav-sub-item').forEach(n => n.classList.remove('active'));
   document.getElementById('nav-'+view)?.classList.add('active');
+  // Abre grupo pai automaticamente
+  const grupo = VIEW_GROUP[view];
+  if (grupo) {
+    const body   = document.getElementById('group-body-'+grupo);
+    const header = document.querySelector('#group-'+grupo+' .nav-group-header');
+    if (body   && !body.classList.contains('open'))   body.classList.add('open');
+    if (header && !header.classList.contains('open')) header.classList.add('open');
+  }
   document.getElementById('topbar-title').textContent = TITLES[view] || view;
   const c = document.getElementById('main-content');
   c.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div></div>`;
   const renders = {
-    dashboard: renderDashboard, estoque: renderEstoque, vendas: renderVendas, pedidos: renderPedidos, clientes: renderClientes,
-    resumo: renderResumo, precos: renderPrecos, precif: renderPrecif, despesas: renderDespesas,
+    dashboard: renderDashboard,
+    produtos: renderProdutos, estoque: renderEstoque, clientes: renderClientes, empresa: renderEmpresa,
+    vendas: renderVendas, pedidos: renderPedidos,
+    resumo: renderResumo, precos: renderPrecos, precif: renderPrecif,
+    'emissao-nf': renderEmissaoNF,
+    despesas: renderDespesas,
     'admin-dash': renderAdminDash, 'admin-clients': renderAdminClients,
     'admin-acessos': renderAdminAcessos, 'admin-planos': renderAdminPlanos,
   };
+  // Bloqueia acesso direto ao Emissor de NF sem permissão
+  if (view === 'emissao-nf' && !currentProfile?.nf_habilitado && currentProfile?.role !== 'admin') {
+    c.innerHTML = `<div class="empty-state" style="padding:60px 20px">
+      <div style="font-size:48px;margin-bottom:16px">🔒</div>
+      <h3 style="font-family:Sora,sans-serif;color:var(--navy);margin-bottom:8px">Módulo não disponível</h3>
+      <p style="color:var(--gray-400);font-size:14px">O módulo de Emissão de NF-e/NFC-e não está habilitado para sua conta.<br>Entre em contato com o administrador para liberar o acesso.</p>
+    </div>`;
+    return;
+  }
   if (renders[view]) await renders[view](c);
 }
 
@@ -902,14 +1023,14 @@ async function renderDashboard(c) {
 }
 async function renderEstoque(c) {
   const { data: produtosRaw } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
-  // Ordena numericamente: P1, P2, P3... P10, P11
   const produtos = (produtosRaw||[]).sort((a,b) => {
     const na = parseInt((a.codigo||'').replace(/[^0-9]/g,''))||0;
     const nb = parseInt((b.codigo||'').replace(/[^0-9]/g,''))||0;
     return na - nb;
   });
-  window._produtosEstoque = produtos; // salva ANTES do render para export funcionar
-  window._entradaSelecionados = []; // reseta seleção de entrada ao recarregar a tela
+  window._produtosEstoque = produtos;
+  window._entradaSelecionados = [];
+
   c.innerHTML = `
   <div class="form-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -927,19 +1048,15 @@ async function renderEstoque(c) {
           autocomplete="off">
         <div id="entrada-sugestoes" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
-
       <div id="entrada-selecionados" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;min-height:10px"></div>
-
       <div class="form-grid" style="margin-top:14px">
         <div class="form-group"><label>Data de Entrada</label><input type="date" id="entrada-data" value="${new Date().toISOString().split('T')[0]}"></div>
         <div class="form-group" style="grid-column:span 2"><label>Observação (aplica a todos os itens desta entrada)</label><input type="text" id="entrada-obs" placeholder="Ex: NF 12345 - Fornecedor XYZ"></div>
       </div>
-
       <div style="margin-top:8px;font-size:11px;color:var(--gray-400)">
-        💡 Marque "🎁 Boni" em cada item para registrar aquela quantidade como bonificação do fornecedor (entra no estoque de bonificação, sem custo).
+        💡 Marque "🎁 Boni" em cada item para registrar como bonificação do fornecedor (entra no estoque de bonificação, sem custo).
       </div>
-
-      <div style="margin-top:16px"><button class="btn btn-success" onclick="registrarEntrada()">✅ Registrar Entrada${''}</button></div>
+      <div style="margin-top:16px"><button class="btn btn-success" onclick="registrarEntrada()">✅ Registrar Entrada</button></div>
     </div>
 
     <!-- MODO XML -->
@@ -981,27 +1098,106 @@ async function renderEstoque(c) {
     </div>
   </div>
 
+  <!-- Saldo atual de estoque (somente leitura, cadastro em Produtos) -->
   <div class="table-card">
     <div class="table-header">
-      <h3>Produtos em Estoque</h3>
+      <h3>Saldo em Estoque</h3>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select id="filtro-cat-estoque" onchange="filtrarEstoque()"
-          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;color:var(--gray-800);background:white">
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
           <option value="">📂 Todas as categorias</option>
           ${[...new Set((produtos||[]).map(p=>p.categoria).filter(Boolean))].sort().map(cat=>`<option value="${cat.toLowerCase()}">${cat}</option>`).join('')}
         </select>
-        <input type="text" id="busca-produto" placeholder="🔍 Buscar produto..." 
+        <input type="text" id="busca-produto" placeholder="🔍 Buscar produto..."
           style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:200px;"
           oninput="filtrarEstoque()">
         <button class="btn btn-success btn-sm" onclick="exportarEstoqueExcel()">📊 Excel</button>
         <button class="btn btn-danger btn-sm" onclick="exportarEstoquePDF()">📄 PDF</button>
-        <button class="btn btn-primary btn-sm" onclick="openProdutoModal()">+ Novo Produto</button>
+        <button class="btn btn-outline btn-sm" onclick="navigate('produtos')" title="Ir para cadastro de produtos">🏷️ Gerenciar Produtos</button>
       </div>
     </div>
-    <table><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Estoque</th><th>Margem</th><th>Ações</th></tr></thead>
-    <tbody id="tbody-produtos">${renderProdutoRows(produtos||[])}</tbody>
+    <table><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Custo</th><th>Venda</th><th>Estoque</th><th>Margem</th></tr></thead>
+    <tbody id="tbody-produtos">${renderProdutoRowsEstoque(produtos||[])}</tbody>
     </table>
   </div>`;
+}
+
+// Versão somente-leitura das linhas de produto (sem botões de editar/excluir)
+function renderProdutoRowsEstoque(produtos) {
+  if (!produtos.length) return '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado — <a onclick="navigate(\'produtos\')" style="color:var(--blue);cursor:pointer">cadastre em Produtos</a></td></tr>';
+  return produtos.map(p => {
+    const isServico = p.tipo === 'servico';
+    const mg = p.venda>0?((p.venda-p.custo)/p.venda*100):0;
+    const estoqueCell = isServico
+      ? '<span style="font-size:11px;background:#EFF6FF;color:var(--blue);padding:3px 8px;border-radius:10px;font-weight:700">🔧 Serviço</span>'
+      : `<strong style="${p.estoque<=3?'color:var(--red)':'color:var(--green-dim)'}">${p.estoque} un.</strong>${p.estoque_bonificacao>0?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 5px;border-radius:10px;font-weight:700">🎁 +${p.estoque_bonificacao}</span>`:''}`;
+    return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}">
+      <td><strong>${p.codigo}</strong></td>
+      <td>${p.nome}${p.bonificacao?'<span style="margin-left:6px;font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:10px">🎁 Boni</span>':''}${isServico?'<span style="margin-left:6px;font-size:10px;background:#EFF6FF;color:var(--blue);padding:2px 6px;border-radius:10px">🔧 Serviço</span>':''}</td>
+      <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
+      <td>${isServico?'—':'R$ '+f(p.custo)}</td>
+      <td>R$ ${f(p.venda)}</td>
+      <td>${estoqueCell}</td>
+      <td>${isServico?'—':'<span class="badge badge-'+(mg>=30?'green':mg>=20?'yellow':'red')+'">'+mg.toFixed(1)+'%</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+// VIEW: PRODUTOS — Cadastro, edição e exclusão
+// ══════════════════════════════════════════════════════
+async function renderProdutos(c) {
+  const { data: produtosRaw } = await sb.from('produtos').select('*').eq('user_id', currentUser.id);
+  const produtos = (produtosRaw||[]).sort((a,b) => {
+    const na = parseInt((a.codigo||'').replace(/[^0-9]/g,''))||0;
+    const nb = parseInt((b.codigo||'').replace(/[^0-9]/g,''))||0;
+    return na - nb;
+  });
+  window._produtosEstoque = produtos;
+
+  const cats = [...new Set((produtos||[]).map(p=>p.categoria).filter(Boolean))].sort();
+
+  c.innerHTML = `
+  <div class="table-card">
+    <div class="table-header" style="flex-wrap:wrap;gap:10px">
+      <h3>Produtos Cadastrados <span style="font-weight:400;color:var(--gray-400)">(${produtos.length})</span></h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="filtro-cat-prod" onchange="filtrarTabelaProdutos()"
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
+          <option value="">📂 Todas as categorias</option>
+          ${cats.map(cat=>`<option value="${cat.toLowerCase()}">${cat}</option>`).join('')}
+        </select>
+        <select id="filtro-tipo-prod" onchange="filtrarTabelaProdutos()"
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;background:white">
+          <option value="">📦 Todos os tipos</option>
+          <option value="produto">📦 Produto</option>
+          <option value="servico">🔧 Serviço</option>
+        </select>
+        <input type="text" id="busca-prod" placeholder="🔍 Buscar por nome ou código..."
+          style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;font-family:Inter,sans-serif;outline:none;width:220px;"
+          oninput="filtrarTabelaProdutos()">
+        <button class="btn btn-success btn-sm" onclick="exportarEstoqueExcel()">📊 Excel</button>
+        <button class="btn btn-danger btn-sm" onclick="exportarEstoquePDF()">📄 PDF</button>
+        <button class="btn btn-primary" onclick="openProdutoModal()">+ Novo Produto</button>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Tipo</th><th>Custo</th><th>Venda</th><th>Margem</th><th>Estoque</th><th>Ações</th></tr></thead>
+      <tbody id="tbody-prod-cad">${renderProdutoRows(produtos)}</tbody>
+    </table>
+  </div>`;
+}
+
+function filtrarTabelaProdutos() {
+  const busca = (document.getElementById('busca-prod')?.value||'').toLowerCase();
+  const cat   = (document.getElementById('filtro-cat-prod')?.value||'').toLowerCase();
+  const tipo  = (document.getElementById('filtro-tipo-prod')?.value||'').toLowerCase();
+  document.querySelectorAll('#tbody-prod-cad tr[data-nome]').forEach(r => {
+    const mb = !busca || (r.dataset.nome||'').includes(busca) || (r.dataset.codigo||'').includes(busca);
+    const mc = !cat  || (r.dataset.cat||'').includes(cat);
+    const mt = !tipo || (r.dataset.tipo||'').includes(tipo);
+    r.style.display = (mb && mc && mt) ? '' : 'none';
+  });
 }
 
 function buscarProdutoEntrada(termo) {
@@ -1083,20 +1279,22 @@ function removerProdutoEntrada(codigo) {
 }
 
 function renderProdutoRows(produtos) {
-  if (!produtos.length) return '<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado</td></tr>';
+  if (!produtos.length) return '<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum produto cadastrado ainda</td></tr>';
   return produtos.map(p => {
     const isServico = p.tipo === 'servico';
     const mg = p.venda>0?((p.venda-p.custo)/p.venda*100):0;
     const estoqueCell = isServico
-      ? '<span style="font-size:11px;background:#EFF6FF;color:var(--blue);padding:3px 8px;border-radius:10px;font-weight:700">🔧 Serviço</span>'
-      : `${p.estoque} un.${p.estoque_bonificacao>0?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 5px;border-radius:10px;font-weight:700">🎁 +${p.estoque_bonificacao}</span>`:''}`;
-    return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}">
+      ? '<span style="font-size:11px;background:#EFF6FF;color:var(--blue);padding:3px 8px;border-radius:10px;font-weight:700">🔧</span>'
+      : `<strong style="${p.estoque<=3?'color:var(--red)':'color:var(--green-dim)'}">${p.estoque} un.</strong>${p.estoque_bonificacao>0?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 5px;border-radius:10px">🎁 +${p.estoque_bonificacao}</span>`:''}`;
+    return `<tr data-nome="${(p.nome||'').toLowerCase()}" data-codigo="${(p.codigo||'').toLowerCase()}" data-cat="${(p.categoria||'').toLowerCase()}" data-tipo="${p.tipo||'produto'}">
       <td><strong>${p.codigo}</strong></td>
-      <td>${p.nome}${p.bonificacao?'<span style="margin-left:6px;font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:10px">🎁 Bonificação</span>':''}${isServico?'<span style="margin-left:6px;font-size:10px;background:#EFF6FF;color:var(--blue);padding:2px 6px;border-radius:10px">🔧 Serviço</span>':''}</td>
+      <td>${p.nome}${p.bonificacao?'<span style="margin-left:6px;font-size:10px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:10px">🎁 Boni</span>':''}</td>
       <td><span class="badge badge-blue">${p.categoria||'—'}</span></td>
-      <td>${isServico?'—':'R$ '+f(p.custo)}</td><td>R$ ${f(p.venda)}</td>
-      <td style="${!isServico && p.estoque<=3?'color:var(--red);font-weight:700':'color:var(--green-dim);font-weight:700'}">${estoqueCell}</td>
+      <td>${isServico?'<span class="badge badge-blue">🔧 Serviço</span>':'<span class="badge badge-green">📦 Produto</span>'}</td>
+      <td>${isServico?'—':'R$ '+f(p.custo)}</td>
+      <td>R$ ${f(p.venda)}</td>
       <td>${isServico?'—':'<span class="badge badge-'+(mg>=30?'green':mg>=20?'yellow':'red')+'">'+mg.toFixed(1)+'%</span>'}</td>
+      <td>${estoqueCell}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm btn-outline" title="Editar" onclick='openEditProduto(${JSON.stringify(p)})'>✏️</button>
         <button class="btn btn-sm btn-danger" title="Excluir" onclick="excluirProduto('${p.id}','${p.nome}')">🗑</button>
@@ -1289,7 +1487,7 @@ async function salvarEdicaoProduto(id) {
   if (error) { showToast('Erro ao salvar','error'); return; }
   closeModal();
   showToast('Produto atualizado!','success');
-  navigate('estoque');
+  navigate('produtos');
 }
 
 async function excluirProduto(id, nome) {
@@ -1308,7 +1506,7 @@ async function confirmarExclusao(id) {
   if (error) { showToast('Erro ao excluir','error'); return; }
   closeModal();
   showToast('Produto excluído!','success');
-  navigate('estoque');
+  navigate('produtos');
 }
 
 function toggleXmlMode() {
@@ -1583,7 +1781,7 @@ async function salvarProduto() {
   if (error) { showToast('Erro ao salvar produto','error'); return; }
   closeModal();
   showToast('Produto cadastrado com sucesso!','success');
-  navigate('estoque');
+  navigate('produtos');
 }
 
 async function renderVendas(c) {
@@ -1990,23 +2188,51 @@ function gerarPedidoPDF(id) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
   const lojaNome = (currentProfile&&currentProfile.loja) ? currentProfile.loja : (currentProfile&&currentProfile.name) ? currentProfile.name : 'Gestão Comercial Pro';
+  const emp = window._empresaFiscal || {};
+  const logoDataUrl = currentProfile?.logo_empresa || null;
 
-  // Header
-  doc.setFillColor(15,28,46);
-  doc.rect(0,0,210,28,'F');
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(16); doc.setFont('helvetica','bold');
-  doc.text(lojaNome.toUpperCase(), 14, 13);
-  doc.setFontSize(10); doc.setFont('helvetica','normal');
-  doc.text('PEDIDO DE VENDA', 14, 21);
+  // ── Cabeçalho ────────────────────────────────────────
+  const hdrH = 38;
+  doc.setFillColor(15, 28, 46);
+  doc.rect(0, 0, 210, hdrH, 'F');
 
-  doc.setFontSize(9);
+  // Logo à DIREITA
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', 155, 5, 40, 28, undefined, 'FAST');
+    } catch(e) {}
+  }
+
+  // Dados da empresa à ESQUERDA
+  doc.setTextColor(255, 255, 255);
+  let hy = 11;
+  doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+  doc.text((emp.razao_social || lojaNome).toUpperCase(), 14, hy); hy += 6;
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  doc.setTextColor(200, 215, 235);
+  if (emp.cnpj) {
+    const cnpjFmt = emp.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    doc.text('CNPJ: ' + cnpjFmt, 14, hy); hy += 5;
+  }
+  if (emp.logradouro || emp.municipio) {
+    const end = [
+      emp.logradouro && emp.numero ? emp.logradouro + ', ' + emp.numero : emp.logradouro,
+      emp.bairro, emp.municipio && emp.uf ? emp.municipio + ' - ' + emp.uf : emp.municipio,
+    ].filter(Boolean).join(' | ');
+    if (end) { doc.text(end, 14, hy, { maxWidth: 130 }); hy += 5; }
+  }
+  if (emp.telefone) { doc.text('Tel: ' + emp.telefone, 14, hy); }
+
+  // Tipo + data/status à direita inferior
+  doc.setTextColor(180, 200, 220);
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+  doc.text('PEDIDO DE VENDA', 196, hdrH - 10, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
   const dataFmt = venda.data_venda ? venda.data_venda.split('-').reverse().join('/') : '—';
-  doc.text('Data: ' + dataFmt, 196, 13, {align:'right'});
-  doc.text('Status: ' + (venda.status==='pago'?'PAGO':'PENDENTE'), 196, 21, {align:'right'});
+  doc.text('Data: ' + dataFmt + '   ' + (venda.status==='pago'?'✅ PAGO':'⏳ PENDENTE'), 196, hdrH - 4, { align: 'right' });
 
   // Dados do cliente
-  let y = 38;
+  let y = hdrH + 10;
   doc.setTextColor(30,41,59);
   doc.setFontSize(11); doc.setFont('helvetica','bold');
   doc.text('DADOS DO CLIENTE', 14, y); y+=6;
@@ -2092,23 +2318,53 @@ function gerarOrcamentoPDF(id) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
   const lojaNome = (currentProfile&&currentProfile.loja) ? currentProfile.loja : (currentProfile&&currentProfile.name) ? currentProfile.name : 'Gestão Comercial Pro';
+  const emp = window._empresaFiscal || {};
+  const logoDataUrl = currentProfile?.logo_empresa || null;
 
-  // Header
-  doc.setFillColor(15,28,46);
-  doc.rect(0,0,210,28,'F');
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(16); doc.setFont('helvetica','bold');
-  doc.text(lojaNome.toUpperCase(), 14, 13);
-  doc.setFontSize(10); doc.setFont('helvetica','normal');
-  doc.text('ORÇAMENTO', 14, 21);
+  // ── Cabeçalho ────────────────────────────────────────
+  const hdrH = 38; // altura do cabeçalho em mm
+  doc.setFillColor(15, 28, 46);
+  doc.rect(0, 0, 210, hdrH, 'F');
 
-  doc.setFontSize(9);
+  // Logo à DIREITA (se existir)
+  if (logoDataUrl) {
+    try {
+      const logoX = 155, logoY = 5, logoW = 40, logoH = 28;
+      doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logoW, logoH, undefined, 'FAST');
+    } catch(e) {}
+  }
+
+  // Dados da empresa à ESQUERDA
+  doc.setTextColor(255, 255, 255);
+  let hy = 11;
+  doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+  doc.text((emp.razao_social || lojaNome).toUpperCase(), 14, hy);
+  hy += 6;
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  doc.setTextColor(200, 215, 235);
+  if (emp.cnpj) {
+    const cnpjFmt = emp.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    doc.text('CNPJ: ' + cnpjFmt, 14, hy); hy += 5;
+  }
+  if (emp.logradouro || emp.municipio) {
+    const end = [
+      emp.logradouro && emp.numero ? emp.logradouro + ', ' + emp.numero : emp.logradouro,
+      emp.bairro, emp.municipio && emp.uf ? emp.municipio + ' - ' + emp.uf : emp.municipio,
+    ].filter(Boolean).join(' | ');
+    if (end) { doc.text(end, 14, hy, { maxWidth: 130 }); hy += 5; }
+  }
+  if (emp.telefone) { doc.text('Tel: ' + emp.telefone, 14, hy); hy += 5; }
+
+  // Tipo do documento + data no canto direito inferior do header
+  doc.setTextColor(180, 200, 220);
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+  doc.text('ORÇAMENTO', 196, hdrH - 10, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
   const dataFmt = ped.data_venda ? ped.data_venda.split('-').reverse().join('/') : '—';
-  doc.text('Data: ' + dataFmt, 196, 13, {align:'right'});
-  doc.text('Pagamento: ' + (ped.forma_pagamento||'—'), 196, 21, {align:'right'});
+  doc.text('Data: ' + dataFmt + '   Pgto: ' + (ped.forma_pagamento||'—'), 196, hdrH - 4, { align: 'right' });
 
   // Dados do cliente
-  let y = 38;
+  let y = hdrH + 10;
   doc.setTextColor(30,41,59);
   doc.setFontSize(11); doc.setFont('helvetica','bold');
   doc.text('DADOS DO CLIENTE', 14, y); y+=6;
@@ -3366,11 +3622,10 @@ async function concretizarVenda(dados) {
   const valorBase = total; // preço dos produtos com desconto (o que o lojista deveria receber)
   let valorBruto = valorBase;
   let valorLiquido = valorBase; // receita real após taxas
-  let repassarTaxa = false; // escopo do função — atualizado abaixo se forma=Cartão
 
   if (dados.formaPgto === 'Cartão') {
     // Cartão puro
-    repassarTaxa = window._cartaoRepassar || false;
+    const repassarTaxa = window._cartaoRepassar || false;
     valorBruto = repassarTaxa ? (window._cartaoValorCobrado || valorBase) : valorBase;
     // Com repasse: cliente pagou a taxa, lojista recebe valorBase inteiro
     // Sem repasse: lojista arca com a taxa, recebe valorBruto*(1-taxa%)
@@ -3412,7 +3667,8 @@ async function concretizarVenda(dados) {
     user_id:currentUser.id, cliente:dados.cliente, telefone:dados.tel, cpf:dados.cpf, contato:dados.contato,
     codigos:dados.codigos, desconto:dados.desc, total, status:statusFinal,
     data_venda:dados.data, observacao:obsFinal, itens_bonificacao:dados.itensBoniStr,
-    forma_pagamento:dados.formaPgto, taxa_maquineta:dados.taxaMaquineta, parcelas_cartao:dados.parcelasCartao
+    forma_pagamento:dados.formaPgto, taxa_maquineta:dados.taxaMaquineta, parcelas_cartao:dados.parcelasCartao, repassar_taxa:repassarTaxa,
+    valor_liquido:valorLiquido, valor_bruto:valorBruto
   }).select().single();
   if (error) { showToast('Erro ao registrar venda','error'); return null; }
 
@@ -6224,7 +6480,7 @@ async function loadAdminClientsTable() {
   const t = document.getElementById('admin-clients-table');
   if (!t) return;
   t.innerHTML = `<div class="table-card"><table>
-    <thead><tr><th>Nome</th><th>E-mail</th><th>Loja</th><th>Plano</th><th>Vencimento</th><th>Status</th>
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Loja</th><th>Plano</th><th>Vencimento</th><th>Status</th><th>Emissor NF</th>
       <th>Ações <span style="font-size:10px;font-weight:400;color:var(--gray-400)">(Bloquear / +30 dias / Resetar dispositivo)</span></th>
     </tr></thead>
     <tbody>${(profiles||[]).map(p=>`<tr>
@@ -6232,6 +6488,13 @@ async function loadAdminClientsTable() {
       <td><span class="badge badge-blue">${p.plan||'mensal'}</span></td>
       <td>${p.expiry_date?fmtDate(p.expiry_date):'—'}</td>
       <td><span class="badge badge-${p.status==='active'?'green':'red'}">${p.status==='active'?'✅ Ativo':'⛔ Bloqueado'}</span></td>
+      <td>
+        <button class="btn btn-sm ${p.nf_habilitado?'btn-success':'btn-outline'}"
+          onclick="adminToggleNF('${p.id}', ${!!p.nf_habilitado})"
+          title="${p.nf_habilitado?'Clique para revogar acesso ao Emissor de NF':'Clique para liberar Emissor de NF'}">
+          ${p.nf_habilitado ? '📄 Habilitado' : '📄 Desabilitado'}
+        </button>
+      </td>
       <td>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-sm ${p.status==='active'?'btn-danger':'btn-success'}" onclick="adminToggleUser('${p.id}','${p.status}')">
@@ -6245,8 +6508,16 @@ async function loadAdminClientsTable() {
           </button>
         </div>
       </td>
-    </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum cliente</td></tr>'}</tbody>
+    </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhum cliente</td></tr>'}</tbody>
   </table></div>`;
+}
+
+async function adminToggleNF(userId, atualHabilitado) {
+  const novoValor = !atualHabilitado;
+  const { error } = await sb.from('profiles').update({ nf_habilitado: novoValor }).eq('id', userId);
+  if (error) { showToast('Erro ao alterar permissão de NF: ' + error.message, 'error'); return; }
+  showToast(novoValor ? '📄 Emissor de NF habilitado para o cliente!' : '📄 Emissor de NF desabilitado.', 'success');
+  loadAdminClientsTable();
 }
 
 async function renderAdminAcessos(c) {
@@ -6553,6 +6824,385 @@ async function criarCliente() {
 }
 
 // ══════════════════════════════════════════════════════
+// VIEW: EMPRESA
+// ══════════════════════════════════════════════════════
+async function renderEmpresa(c) {
+  // Busca profile (sempre existe) e tenta buscar dados fiscais (tabela pode não existir ainda)
+  let prof = null, emp = null;
+  try {
+    const { data } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    prof = data;
+  } catch(e) {}
+  try {
+    const { data, error } = await sb.from('empresas_fiscais').select('*').eq('user_id', currentUser.id).maybeSingle();
+    if (!error) emp = data;
+  } catch(e) {}
+  window._empresaFiscal = emp || null;
+
+  c.innerHTML = `
+  <div class="form-card">
+    <div class="section-title">🏢 Dados da Empresa</div>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:20px">Informações utilizadas nos documentos emitidos pelo sistema e na emissão de NF-e/NFC-e.</p>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:span 2">
+        <label>Razão Social / Nome da Empresa</label>
+        <input type="text" id="emp-razao" value="${(prof?.loja||'').replace(/"/g,'&quot;')}" placeholder="Ex: Monte Suplementos LTDA">
+      </div>
+      <div class="form-group">
+        <label>Nome Fantasia</label>
+        <input type="text" id="emp-fantasia" value="${(emp?.nome_fantasia||'').replace(/"/g,'&quot;')}" placeholder="Ex: Monte Suplementos">
+      </div>
+      <div class="form-group">
+        <label>CNPJ</label>
+        <input type="text" id="emp-cnpj" value="${emp?.cnpj||''}" placeholder="00.000.000/0001-00">
+      </div>
+      <div class="form-group">
+        <label>Inscrição Estadual</label>
+        <input type="text" id="emp-ie" value="${emp?.inscricao_estadual||''}" placeholder="000.000.000">
+      </div>
+      <div class="form-group">
+        <label>Inscrição Municipal</label>
+        <input type="text" id="emp-im" value="${emp?.inscricao_municipal||''}" placeholder="Opcional">
+      </div>
+      <div class="form-group">
+        <label>Telefone</label>
+        <input type="text" id="emp-tel" value="${emp?.telefone||''}" placeholder="(81) 9 9999-9999" oninput="formatarTelefone(this)">
+      </div>
+      <div class="form-group">
+        <label>E-mail comercial</label>
+        <input type="email" id="emp-email" value="${emp?.email||prof?.email||''}" placeholder="contato@empresa.com">
+      </div>
+      <div class="form-group">
+        <label>Regime Tributário</label>
+        <select id="emp-regime">
+          <option value="1" ${(!emp?.regime_tributario||emp?.regime_tributario==='1')?'selected':''}>Simples Nacional</option>
+          <option value="2" ${emp?.regime_tributario==='2'?'selected':''}>Simples Nacional — excesso sublimite</option>
+          <option value="3" ${emp?.regime_tributario==='3'?'selected':''}>Regime Normal (Lucro Presumido/Real)</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:24px">📍 Endereço</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>CEP</label>
+        <input type="text" id="emp-cep" value="${emp?.cep||''}" maxlength="9" placeholder="00000-000" oninput="formatarCEP(this)" onblur="buscarCEPEmpresa(this.value)">
+        <div id="emp-cep-status" style="font-size:11px;color:var(--gray-400);margin-top:4px;min-height:14px"></div>
+      </div>
+      <div class="form-group"><label>Número</label><input type="text" id="emp-numero" value="${emp?.numero||''}" placeholder="S/N"></div>
+      <div class="form-group" style="grid-column:span 2"><label>Logradouro</label><input type="text" id="emp-logradouro" value="${emp?.logradouro||''}" placeholder="Rua, Avenida..."></div>
+      <div class="form-group"><label>Complemento</label><input type="text" id="emp-complemento" value="${emp?.complemento||''}" placeholder="Sala, Loja..."></div>
+      <div class="form-group"><label>Bairro</label><input type="text" id="emp-bairro" value="${emp?.bairro||''}" placeholder="Bairro"></div>
+      <div class="form-group"><label>Município</label><input type="text" id="emp-municipio" value="${emp?.municipio||''}" placeholder="Cidade"></div>
+      <div class="form-group"><label>UF</label><input type="text" id="emp-uf" value="${emp?.uf||''}" maxlength="2" placeholder="PE"></div>
+      <input type="hidden" id="emp-ibge" value="${emp?.codigo_municipio_ibge||''}">
+    </div>
+    <div style="margin-top:24px;display:flex;gap:10px">
+      <button class="btn btn-primary" onclick="salvarDadosEmpresa()">💾 Salvar Dados</button>
+    </div>
+  </div>
+
+  ${emp?.focus_nfe_habilitado ? `
+  <div class="form-card" style="margin-top:16px;border-left:4px solid var(--green)">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="badge badge-green">✅ Habilitado para emissão de NF-e/NFC-e</span>
+      <span class="badge badge-${emp.ambiente==='producao'?'blue':'yellow'}">${emp.ambiente==='producao'?'🔵 PRODUÇÃO':'🟡 HOMOLOGAÇÃO'}</span>
+    </div>
+    <p style="font-size:12px;color:var(--gray-400);margin-top:8px">Certificado digital A1 cadastrado. Para trocar o certificado acesse <strong>Vendas → Emissão de NF</strong>.</p>
+  </div>` : `
+  <div class="form-card" style="margin-top:16px;border-left:4px solid var(--yellow)">
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px">⚠️ Certificado digital A1 não configurado. Para emitir notas fiscais, acesse <strong>Vendas → Emissão de NF</strong> e faça o upload do certificado.</p>
+    <button class="btn btn-outline btn-sm" onclick="navigate('emissao-nf')">📄 Ir para Emissão de NF →</button>
+  </div>`}`;
+}
+
+async function buscarCEPEmpresa(cep) {
+  const digits = (cep||'').replace(/\D/g,'');
+  const status = document.getElementById('emp-cep-status');
+  if (digits.length !== 8) { if (status) status.textContent = digits.length>0?'CEP incompleto':''; return; }
+  if (status) status.textContent = '🔎 Buscando...';
+  try {
+    const resp = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+    const data = await resp.json();
+    if (data.erro) { if (status) status.textContent = '❌ CEP não encontrado'; return; }
+    const setIf = (id, val) => { const el = document.getElementById(id); if (el && !el.value) el.value = val||''; };
+    document.getElementById('emp-logradouro').value = data.logradouro || document.getElementById('emp-logradouro').value;
+    setIf('emp-bairro', data.bairro);
+    setIf('emp-municipio', data.localidade);
+    setIf('emp-uf', data.uf);
+    document.getElementById('emp-ibge').value = data.ibge||'';
+    if (status) status.textContent = '✅ Endereço encontrado — complete com o número';
+  } catch(e) { if (status) status.textContent = '⚠️ Erro ao buscar CEP'; }
+}
+
+async function salvarDadosEmpresa() {
+  const razao = document.getElementById('emp-razao').value.trim();
+  if (!razao) { showToast('Informe o nome da empresa','error'); return; }
+
+  // Sempre salva o nome da loja no profile
+  try {
+    await sb.from('profiles').update({ loja: razao }).eq('id', currentUser.id);
+    if (currentProfile) currentProfile.loja = razao;
+    document.getElementById('sidebar-loja').textContent = razao;
+  } catch(e) {}
+
+  const cnpj = document.getElementById('emp-cnpj').value.trim().replace(/\D/g,'');
+  if (cnpj) {
+    try {
+      const { error } = await sb.from('empresas_fiscais').upsert({
+        user_id: currentUser.id, cnpj, razao_social: razao,
+        nome_fantasia: document.getElementById('emp-fantasia').value.trim(),
+        inscricao_estadual: document.getElementById('emp-ie').value.trim(),
+        inscricao_municipal: document.getElementById('emp-im').value.trim(),
+        regime_tributario: document.getElementById('emp-regime').value,
+        telefone: document.getElementById('emp-tel').value.trim(),
+        email: document.getElementById('emp-email').value.trim(),
+        cep: document.getElementById('emp-cep').value.trim(),
+        logradouro: document.getElementById('emp-logradouro').value.trim(),
+        numero: document.getElementById('emp-numero').value.trim(),
+        complemento: document.getElementById('emp-complemento').value.trim(),
+        bairro: document.getElementById('emp-bairro').value.trim(),
+        municipio: document.getElementById('emp-municipio').value.trim(),
+        uf: document.getElementById('emp-uf').value.trim().toUpperCase(),
+        codigo_municipio_ibge: document.getElementById('emp-ibge').value,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+      if (error) {
+        // Tabela ainda não existe — só salva o profile e avisa
+        showToast('✅ Nome salvo! Para salvar CNPJ/endereço, rode o SQL de configuração fiscal no Supabase.','success');
+        return;
+      }
+    } catch(e) {
+      showToast('✅ Nome salvo! Para salvar dados fiscais, rode o SQL de configuração no Supabase.','success');
+      return;
+    }
+  }
+
+  showToast('✅ Dados da empresa salvos!', 'success');
+  navigate('empresa');
+}
+
+// ══════════════════════════════════════════════════════
+// VIEW: EMISSÃO DE NF
+// ══════════════════════════════════════════════════════
+async function renderEmissaoNF(c) {
+  let vendas = [], produtos = [], notas = [], empresa = null;
+  try {
+    const [vRes, pRes] = await Promise.all([
+      sb.from('vendas').select('*').eq('user_id', currentUser.id).order('created_at',{ascending:false}),
+      sb.from('produtos').select('codigo,nome,venda,custo,tipo').eq('user_id', currentUser.id),
+    ]);
+    vendas   = vRes.data||[];
+    produtos = pRes.data||[];
+  } catch(e) {}
+  try {
+    const { data, error } = await sb.from('notas_fiscais').select('*').eq('user_id', currentUser.id);
+    if (!error) notas = data||[];
+  } catch(e) {}
+  try {
+    const { data, error } = await sb.from('empresas_fiscais').select('*').eq('user_id', currentUser.id).maybeSingle();
+    if (!error) empresa = data||null;
+  } catch(e) {}
+
+  window._nfVendas = vendas;
+  window._nfProdutos = produtos;
+  window._empresaFiscal = empresa;
+
+  const notaPorVenda = {};
+  notas.forEach(n => { if (n.venda_id) notaPorVenda[n.venda_id] = n; });
+  const habilitado = empresa?.focus_nfe_habilitado;
+
+  c.innerHTML = `
+  ${!habilitado ? `
+  <div class="form-card" style="border-left:4px solid var(--yellow);margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:24px">⚠️</span>
+      <div>
+        <strong style="font-size:14px">Certificado digital não configurado</strong>
+        <p style="font-size:12px;color:var(--gray-400);margin-top:2px">Para emitir notas fiscais é necessário cadastrar os dados fiscais e o certificado A1.</p>
+      </div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="abrirCadastroNF()">+ Configurar Certificado</button>
+    </div>
+  </div>` : `
+  <div class="form-card" style="border-left:4px solid var(--green);margin-bottom:16px;padding:12px 20px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="badge badge-green">✅ ${empresa.razao_social}</span>
+      <span class="badge badge-${empresa.ambiente==='producao'?'blue':'yellow'}">${empresa.ambiente==='producao'?'🔵 PRODUÇÃO':'🟡 HOMOLOGAÇÃO'}</span>
+      <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="abrirCadastroNF()">⚙️ Configurações</button>
+    </div>
+  </div>`}
+
+  <div class="table-card">
+    <div class="table-header" style="flex-wrap:wrap;gap:10px">
+      <h3>Vendas — Emissão de Nota Fiscal</h3>
+      <input type="text" id="busca-nf" placeholder="🔍 Buscar por cliente..."
+        style="border:1px solid var(--gray-200);border-radius:8px;padding:7px 12px;font-size:13px;width:220px;outline:none"
+        oninput="filtrarNF(this.value)">
+    </div>
+    <table>
+      <thead><tr><th>Cliente</th><th>Produtos</th><th>Data</th><th>Total</th><th>Pagamento</th><th>Status Venda</th><th>Nota Fiscal</th><th>Ações</th></tr></thead>
+      <tbody id="tbody-nf">${renderNFRows(vendas||[], produtos||[], notaPorVenda, habilitado)}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderNFRows(vendas, produtos, notaPorVenda, habilitado) {
+  if (!vendas.length) return '<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:24px">Nenhuma venda registrada</td></tr>';
+  return vendas.map(v => {
+    const codes = (v.codigos||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const grp = {}; codes.forEach(c=>{ grp[c]=(grp[c]||0)+1; });
+    const nomesStr = Object.keys(grp).map(c=>{
+      const p = produtos.find(x=>x.codigo===c);
+      return grp[c]>1 ? grp[c]+'x '+(p?p.nome:c) : (p?p.nome:c);
+    }).join(', ');
+    const nota = notaPorVenda[v.id];
+    const badgeNota = nota ? ({
+      autorizado:      `<span class="badge badge-green">✅ ${nota.tipo==='nfce'?'NFC-e':'NF-e'}${nota.numero?' #'+nota.numero:''}</span>`,
+      processando:     `<span class="badge badge-yellow">⏳ Processando</span>`,
+      erro_autorizacao:`<span class="badge badge-red">❌ Erro</span>`,
+      cancelado:       `<span class="badge badge-red">🚫 Cancelada</span>`,
+    }[nota.status] || `<span class="badge badge-blue">${nota.status}</span>`)
+    : '<span style="color:var(--gray-400);font-size:12px">—</span>';
+
+    const btnEmitir = habilitado
+      ? `<button class="btn btn-sm btn-primary" onclick="abrirEmitirNF('${v.id}')">📄 Emitir</button>`
+      : `<button class="btn btn-sm btn-outline" disabled>📄 Emitir</button>`;
+    const btnConsultar = nota ? `<button class="btn btn-sm btn-outline" onclick="consultarNF('${nota.ref}')" title="Atualizar status">🔄</button>` : '';
+    const btnDanfe = nota?.caminho_danfe ? `<button class="btn btn-sm btn-outline" onclick="window.open('${nota.caminho_danfe}','_blank')" title="DANFE">📋</button>` : '';
+
+    return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-codigos="${(v.codigos||'').toLowerCase()}">
+      <td><strong>${v.cliente||'—'}</strong></td>
+      <td style="font-size:12px;max-width:180px">${nomesStr||'—'}</td>
+      <td>${v.data_venda||'—'}</td>
+      <td><strong>R$ ${f(v.total)}</strong></td>
+      <td style="font-size:12px">${v.forma_pagamento||'—'}</td>
+      <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
+      <td>${badgeNota}</td>
+      <td style="display:flex;gap:4px">${btnEmitir}${btnConsultar}${btnDanfe}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarNF(q) {
+  q = (q||'').toLowerCase();
+  document.querySelectorAll('#tbody-nf tr').forEach(tr => {
+    tr.style.display = (!q || (tr.dataset.cliente||'').includes(q) || (tr.dataset.codigos||'').includes(q)) ? '' : 'none';
+  });
+}
+
+function abrirCadastroNF() {
+  const e = window._empresaFiscal||{};
+  document.getElementById('modal-body').innerHTML = `
+    <h3>⚙️ Configurar Emissão de NF-e / NFC-e</h3>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:16px">A emissão é feita via <strong>Focus NFe</strong>. Você precisará de um certificado digital A1 (.pfx). Os dados fiscais (CNPJ, IE, endereço) são lidos de <strong>Cadastro → Empresa</strong>.</p>
+    ${!e.cnpj?'<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:14px">⚠️ CNPJ não preenchido. Preencha em <strong>Cadastro → Empresa</strong> antes de continuar.</div>':''}
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Ambiente</label>
+        <select id="nf-ambiente">
+          <option value="homologacao" ${e.ambiente!=='producao'?'selected':''}>🟡 Homologação (testes)</option>
+          <option value="producao" ${e.ambiente==='producao'?'selected':''}>🔵 Produção (notas reais)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Senha do Certificado</label>
+        <input type="password" id="nf-cert-senha" placeholder="${e.focus_nfe_habilitado?'Deixe em branco para manter':'Senha do arquivo .pfx'}">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Certificado Digital A1 (.pfx ou .p12)</label>
+        <input type="file" id="nf-cert-file" accept=".pfx,.p12">
+        <div style="font-size:11px;color:var(--gray-400);margin-top:4px">${e.focus_nfe_habilitado?'Envie apenas para substituir o certificado atual.':'Obrigatório para habilitar a emissão.'}</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" id="nf-cfg-btn" ${!e.cnpj?'disabled':''} onclick="salvarConfigNF()">💾 Salvar e Habilitar</button>
+    </div>`;
+  openModal();
+}
+
+async function salvarConfigNF() {
+  const emp = window._empresaFiscal;
+  if (!emp?.cnpj) { showToast('Preencha o CNPJ em Cadastro → Empresa primeiro','error'); return; }
+  const certFile = document.getElementById('nf-cert-file').files[0];
+  const senha    = document.getElementById('nf-cert-senha').value;
+  if (!certFile && !emp.focus_nfe_habilitado) { showToast('Envie o certificado A1 (.pfx)','error'); return; }
+  if (certFile && !senha) { showToast('Informe a senha do certificado','error'); return; }
+  const btn = document.getElementById('nf-cfg-btn');
+  btn.disabled=true; btn.textContent='⏳ Enviando...';
+  const { data: sess } = await sb.auth.getSession();
+  const body = {
+    cnpj: emp.cnpj, razao_social: emp.razao_social, nome_fantasia: emp.nome_fantasia,
+    inscricao_estadual: emp.inscricao_estadual, inscricao_municipal: emp.inscricao_municipal,
+    regime_tributario: emp.regime_tributario||'1',
+    cep: emp.cep, logradouro: emp.logradouro, numero: emp.numero, complemento: emp.complemento,
+    bairro: emp.bairro, municipio: emp.municipio, codigo_municipio_ibge: emp.codigo_municipio_ibge,
+    uf: emp.uf, telefone: emp.telefone, email: emp.email,
+    ambiente: document.getElementById('nf-ambiente').value,
+  };
+  if (certFile) {
+    body.certificado_base64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(certFile); });
+    body.senha_certificado = senha;
+  }
+  const resp = await fetch(SUPABASE_URL+'/functions/v1/cadastrar-empresa-fiscal', {
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess?.session?.access_token},
+    body: JSON.stringify(body)
+  });
+  const data = await resp.json().catch(()=>({}));
+  if (!resp.ok) { showToast('Erro: '+(data.erro||'falha'), 'error'); btn.disabled=false; btn.textContent='💾 Salvar e Habilitar'; return; }
+  closeModal();
+  showToast('✅ Empresa habilitada para emissão de NF-e/NFC-e!','success');
+  navigate('emissao-nf');
+}
+
+function abrirEmitirNF(vendaId) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>📄 Emitir Documento Fiscal</h3>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:20px">Escolha o tipo de nota para esta venda:</p>
+    <div style="display:flex;gap:12px">
+      <button class="btn btn-primary" style="flex:1;padding:18px;display:flex;flex-direction:column;align-items:center;gap:6px" onclick="emitirNF('${vendaId}','nfce')">
+        <span style="font-size:26px">🧾</span><strong>NFC-e</strong>
+        <small style="font-weight:400;opacity:.8;text-align:center">Consumidor final<br>(varejo presencial)</small>
+      </button>
+      <button class="btn btn-outline" style="flex:1;padding:18px;display:flex;flex-direction:column;align-items:center;gap:6px" onclick="emitirNF('${vendaId}','nfe')">
+        <span style="font-size:26px">📄</span><strong>NF-e</strong>
+        <small style="font-weight:400;opacity:.8;text-align:center">Venda para empresa<br>(B2B)</small>
+      </button>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button></div>`;
+  openModal();
+}
+
+async function emitirNF(vendaId, tipo) {
+  document.getElementById('modal-body').innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div><p style="margin-top:14px;color:var(--gray-400)">Enviando ${tipo==='nfce'?'NFC-e':'NF-e'} para a SEFAZ…</p></div>`;
+  const { data: sess } = await sb.auth.getSession();
+  const resp = await fetch(SUPABASE_URL+'/functions/v1/emitir-nota', {
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess?.session?.access_token},
+    body: JSON.stringify({ venda_id: vendaId, tipo })
+  });
+  const data = await resp.json().catch(()=>({}));
+  closeModal();
+  if (!resp.ok) {
+    const extra = data.campos_faltando ? ` (faltam: ${data.campos_faltando.join(', ')})` : (data.produtos?` (sem NCM: ${data.produtos.join(', ')})`:'');
+    showToast('Erro: '+(data.erro||'falha')+extra, 'error');
+    return;
+  }
+  showToast('✅ Nota enviada! Aguarde a autorização da SEFAZ.','success');
+  navigate('emissao-nf');
+}
+
+async function consultarNF(ref) {
+  showToast('🔄 Consultando SEFAZ...','success');
+  const { data: sess } = await sb.auth.getSession();
+  const resp = await fetch(SUPABASE_URL+'/functions/v1/gerenciar-nota', {
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess?.session?.access_token},
+    body: JSON.stringify({ acao:'consultar', ref })
+  });
+  if (!resp.ok) { showToast('Erro ao consultar','error'); return; }
+  showToast('Status atualizado!','success');
+  navigate('emissao-nf');
+}
+
+// ══════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════
 function f(n){return(+n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -6631,4 +7281,3 @@ init();
 </script>
 </body>
 </html>
-  
