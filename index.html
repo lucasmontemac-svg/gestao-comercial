@@ -6480,7 +6480,7 @@ async function loadAdminClientsTable() {
   const t = document.getElementById('admin-clients-table');
   if (!t) return;
   t.innerHTML = `<div class="table-card"><table>
-    <thead><tr><th>Nome</th><th>E-mail</th><th>Loja</th><th>Plano</th><th>Vencimento</th><th>Status</th><th>Emissor NF</th>
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Loja</th><th>Plano</th><th>Vencimento</th><th>Status</th><th>Módulos</th>
       <th>Ações <span style="font-size:10px;font-weight:400;color:var(--gray-400)">(Bloquear / +30 dias / Resetar dispositivo)</span></th>
     </tr></thead>
     <tbody>${(profiles||[]).map(p=>`<tr>
@@ -6493,6 +6493,11 @@ async function loadAdminClientsTable() {
           onclick="adminToggleNF('${p.id}', ${!!p.nf_habilitado})"
           title="${p.nf_habilitado?'Clique para revogar acesso ao Emissor de NF':'Clique para liberar Emissor de NF'}">
           ${p.nf_habilitado ? '📄 Habilitado' : '📄 Desabilitado'}
+        </button>
+        <button class="btn btn-sm ${p.barber_habilitado?'btn-warning':'btn-outline'}" style="margin-top:4px;${p.barber_habilitado?'background:#c9a84c;color:#000;border-color:#c9a84c':''}"
+          onclick="adminToggleBarber('${p.id}', ${!!p.barber_habilitado})"
+          title="${p.barber_habilitado?'Clique para revogar acesso ao BarberPro':'Clique para liberar BarberPro'}">
+          ${p.barber_habilitado ? '✂️ BarberPro ON' : '✂️ BarberPro OFF'}
         </button>
       </td>
       <td>
@@ -6517,6 +6522,14 @@ async function adminToggleNF(userId, atualHabilitado) {
   const { error } = await sb.from('profiles').update({ nf_habilitado: novoValor }).eq('id', userId);
   if (error) { showToast('Erro ao alterar permissão de NF: ' + error.message, 'error'); return; }
   showToast(novoValor ? '📄 Emissor de NF habilitado para o cliente!' : '📄 Emissor de NF desabilitado.', 'success');
+  loadAdminClientsTable();
+}
+
+async function adminToggleBarber(userId, atualHabilitado) {
+  const novoValor = !atualHabilitado;
+  const { error } = await sb.from('profiles').update({ barber_habilitado: novoValor }).eq('id', userId);
+  if (error) { showToast('Erro ao alterar permissão do BarberPro: ' + error.message, 'error'); return; }
+  showToast(novoValor ? '✂️ BarberPro habilitado para o cliente!' : '✂️ BarberPro desabilitado.', 'success');
   loadAdminClientsTable();
 }
 
@@ -6761,6 +6774,19 @@ function openNovoClienteModal() {
       <div class="form-group"><label>Nome da Loja</label><input type="text" id="nc-loja" placeholder="Ex: Suplementos JS"></div>
       <div class="form-group"><label>Dias de Acesso</label><input type="number" id="nc-dias" value="30" min="1"></div>
     </div>
+    <div style="margin:16px 0;padding:14px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(255,255,255,.08)">
+      <div style="font-size:12px;font-weight:600;color:var(--gray-300);margin-bottom:10px;letter-spacing:.5px;text-transform:uppercase">Módulos habilitados</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="nc-mod-gcp" checked style="width:16px;height:16px;accent-color:#22c55e">
+          🏪 Gestão Comercial Pro
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="nc-mod-barber" style="width:16px;height:16px;accent-color:#c9a84c">
+          ✂️ BarberPro
+        </label>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-success" id="nc-btn" onclick="criarCliente()">✅ Criar Cliente</button>
@@ -6798,6 +6824,7 @@ async function criarCliente() {
 
   if (data?.user) {
     // Insere perfil manualmente
+    const barberHab = document.getElementById('nc-mod-barber')?.checked || false;
     await sb.from('profiles').upsert({
       id: data.user.id,
       name: nome,
@@ -6806,7 +6833,8 @@ async function criarCliente() {
       status: 'active',
       loja,
       plan: 'mensal',
-      expiry_date: expiry.toISOString().split('T')[0]
+      expiry_date: expiry.toISOString().split('T')[0],
+      barber_habilitado: barberHab
     });
 
     // Restaura sessão do admin
@@ -7009,7 +7037,17 @@ async function renderEmissaoNF(c) {
 
   const notaPorVenda = {};
   notas.forEach(n => { if (n.venda_id) notaPorVenda[n.venda_id] = n; });
-  const habilitado = empresa?.focus_nfe_habilitado;
+
+  // Verifica certificado (tabela pode não existir ainda)
+  let temCert = false;
+  try {
+    const { data: certRow } = await sb.from('certificados_sefaz').select('id,cn,validade').eq('user_id', currentUser.id).maybeSingle();
+    temCert = !!certRow?.id;
+    window._temCertificado = temCert;
+    window._certInfo = certRow || null;
+  } catch(e) {}
+
+  const habilitado = empresa?.cnpj && temCert;
 
   c.innerHTML = `
   ${!habilitado ? `
@@ -7017,17 +7055,21 @@ async function renderEmissaoNF(c) {
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="font-size:24px">⚠️</span>
       <div>
-        <strong style="font-size:14px">Certificado digital não configurado</strong>
-        <p style="font-size:12px;color:var(--gray-400);margin-top:2px">Para emitir notas fiscais é necessário cadastrar os dados fiscais e o certificado A1.</p>
+        <strong style="font-size:14px">Configuração necessária</strong>
+        <p style="font-size:12px;color:var(--gray-400);margin-top:2px">${!empresa?.cnpj?'Preencha o CNPJ em Cadastro → Empresa.':'Certificado digital A1 não cadastrado.'}</p>
       </div>
-      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="abrirCadastroNF()">+ Configurar Certificado</button>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="abrirCadastroNF()">⚙️ Configurar</button>
     </div>
   </div>` : `
   <div class="form-card" style="border-left:4px solid var(--green);margin-bottom:16px;padding:12px 20px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span class="badge badge-green">✅ ${empresa.razao_social}</span>
       <span class="badge badge-${empresa.ambiente==='producao'?'blue':'yellow'}">${empresa.ambiente==='producao'?'🔵 PRODUÇÃO':'🟡 HOMOLOGAÇÃO'}</span>
-      <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="abrirCadastroNF()">⚙️ Configurações</button>
+      <span class="badge badge-green">🔐 Cert: ${window._certInfo?.cn||'OK'}</span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="abrirInutilizarNF()">🗑 Inutilizar Numeração</button>
+        <button class="btn btn-outline btn-sm" onclick="abrirCadastroNF()">⚙️ Configurações</button>
+      </div>
     </div>
   </div>`}
 
@@ -7065,9 +7107,10 @@ function renderNFRows(vendas, produtos, notaPorVenda, habilitado) {
 
     const btnEmitir = habilitado
       ? `<button class="btn btn-sm btn-primary" onclick="abrirEmitirNF('${v.id}')">📄 Emitir</button>`
-      : `<button class="btn btn-sm btn-outline" disabled>📄 Emitir</button>`;
-    const btnConsultar = nota ? `<button class="btn btn-sm btn-outline" onclick="consultarNF('${nota.ref}')" title="Atualizar status">🔄</button>` : '';
-    const btnDanfe = nota?.caminho_danfe ? `<button class="btn btn-sm btn-outline" onclick="window.open('${nota.caminho_danfe}','_blank')" title="DANFE">📋</button>` : '';
+      : `<button class="btn btn-sm btn-outline" disabled title="Configure o certificado primeiro">📄 Emitir</button>`;
+    const btnConsultar = nota ? `<button class="btn btn-sm btn-outline" onclick="consultarNF('${nota.id}')" title="Atualizar status">🔄</button>` : '';
+    const btnDanfe     = nota?.url_danfe ? `<button class="btn btn-sm btn-outline" onclick="window.open('${nota.url_danfe}','_blank')" title="DANFE">📋</button>` : '';
+    const btnCancelar  = (nota?.status==='autorizado') ? `<button class="btn btn-sm btn-danger" onclick="abrirCancelarNF('${nota.id}')" title="Cancelar nota">🚫</button>` : '';
 
     return `<tr data-cliente="${(v.cliente||'').toLowerCase()}" data-codigos="${(v.codigos||'').toLowerCase()}">
       <td><strong>${v.cliente||'—'}</strong></td>
@@ -7076,8 +7119,8 @@ function renderNFRows(vendas, produtos, notaPorVenda, habilitado) {
       <td><strong>R$ ${f(v.total)}</strong></td>
       <td style="font-size:12px">${v.forma_pagamento||'—'}</td>
       <td><span class="badge badge-${v.status==='pago'?'green':'yellow'}">${v.status==='pago'?'✅ Pago':'⏳ Pendente'}</span></td>
-      <td>${badgeNota}</td>
-      <td style="display:flex;gap:4px">${btnEmitir}${btnConsultar}${btnDanfe}</td>
+      <td>${badgeNota}${nota?.numero_nf?`<br><small style="color:var(--gray-400)">Nº ${nota.numero_nf} | Prot: ${nota.protocolo||'aguard.'}</small>`:''}</td>
+      <td style="display:flex;gap:4px">${btnEmitir}${btnConsultar}${btnDanfe}${btnCancelar}</td>
     </tr>`;
   }).join('');
 }
@@ -7091,31 +7134,50 @@ function filtrarNF(q) {
 
 function abrirCadastroNF() {
   const e = window._empresaFiscal||{};
+  const temCert = window._temCertificado || false;
   document.getElementById('modal-body').innerHTML = `
-    <h3>⚙️ Configurar Emissão de NF-e / NFC-e</h3>
-    <p style="font-size:12px;color:var(--gray-400);margin-bottom:16px">A emissão é feita via <strong>Focus NFe</strong>. Você precisará de um certificado digital A1 (.pfx). Os dados fiscais (CNPJ, IE, endereço) são lidos de <strong>Cadastro → Empresa</strong>.</p>
-    ${!e.cnpj?'<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:14px">⚠️ CNPJ não preenchido. Preencha em <strong>Cadastro → Empresa</strong> antes de continuar.</div>':''}
+    <h3>⚙️ Configurar Emissão de NF-e / NFC-e — SEFAZ Direta</h3>
+    ${!e.cnpj?'<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:14px">⚠️ CNPJ não preenchido. Vá em <strong>Cadastro → Empresa</strong> primeiro.</div>':''}
+    <div style="background:rgba(46,117,182,.07);border:1px solid rgba(46,117,182,.2);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--gray-600);margin-bottom:16px">
+      ℹ️ Integração direta com a SEFAZ — sem intermediários. Os dados fiscais (CNPJ, IE, endereço, regime) são lidos de <strong>Cadastro → Empresa</strong>.
+    </div>
     <div class="form-grid">
       <div class="form-group">
         <label>Ambiente</label>
         <select id="nf-ambiente">
           <option value="homologacao" ${e.ambiente!=='producao'?'selected':''}>🟡 Homologação (testes)</option>
-          <option value="producao" ${e.ambiente==='producao'?'selected':''}>🔵 Produção (notas reais)</option>
+          <option value="producao"    ${e.ambiente==='producao'?'selected':''}>🔵 Produção (notas reais)</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Senha do Certificado</label>
-        <input type="password" id="nf-cert-senha" placeholder="${e.focus_nfe_habilitado?'Deixe em branco para manter':'Senha do arquivo .pfx'}">
+        <label>Série NF-e</label>
+        <input type="text" id="nf-serie-nfe" value="${e.serie_nfe||'001'}" maxlength="3" placeholder="001">
+      </div>
+      <div class="form-group">
+        <label>Série NFC-e</label>
+        <input type="text" id="nf-serie-nfce" value="${e.serie_nfce||'001'}" maxlength="3" placeholder="001">
+      </div>
+      <div class="form-group">
+        <label>CSC ID <small style="color:var(--gray-400)">(NFC-e — obtido na SEFAZ-PE)</small></label>
+        <input type="text" id="nf-csc-id" value="${e.csc_id||''}" placeholder="000001">
       </div>
       <div class="form-group" style="grid-column:span 2">
-        <label>Certificado Digital A1 (.pfx ou .p12)</label>
+        <label>CSC <small style="color:var(--gray-400)">(Código de Segurança do Contribuinte — NFC-e)</small></label>
+        <input type="text" id="nf-csc" value="${e.csc||''}" placeholder="00000000000000000000000000000000">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Certificado Digital A1 (.pfx ou .p12) ${temCert?'<span style="color:var(--green);font-size:11px">✅ já cadastrado</span>':''}</label>
         <input type="file" id="nf-cert-file" accept=".pfx,.p12">
-        <div style="font-size:11px;color:var(--gray-400);margin-top:4px">${e.focus_nfe_habilitado?'Envie apenas para substituir o certificado atual.':'Obrigatório para habilitar a emissão.'}</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:4px">${temCert?'Envie apenas para substituir o certificado atual.':'Obrigatório para emitir. O certificado é criptografado antes de ser armazenado.'}</div>
+      </div>
+      <div class="form-group">
+        <label>Senha do Certificado</label>
+        <input type="password" id="nf-cert-senha" placeholder="${temCert?'Deixe em branco para manter':'Senha do arquivo .pfx'}">
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-success" id="nf-cfg-btn" ${!e.cnpj?'disabled':''} onclick="salvarConfigNF()">💾 Salvar e Habilitar</button>
+      <button class="btn btn-success" id="nf-cfg-btn" ${!e.cnpj?'disabled':''} onclick="salvarConfigNF()">💾 Salvar Configurações</button>
     </div>`;
   openModal();
 }
@@ -7125,38 +7187,53 @@ async function salvarConfigNF() {
   if (!emp?.cnpj) { showToast('Preencha o CNPJ em Cadastro → Empresa primeiro','error'); return; }
   const certFile = document.getElementById('nf-cert-file').files[0];
   const senha    = document.getElementById('nf-cert-senha').value;
-  if (!certFile && !emp.focus_nfe_habilitado) { showToast('Envie o certificado A1 (.pfx)','error'); return; }
   if (certFile && !senha) { showToast('Informe a senha do certificado','error'); return; }
+  if (!certFile && !window._temCertificado) { showToast('Envie o certificado A1 (.pfx)','error'); return; }
+
   const btn = document.getElementById('nf-cfg-btn');
-  btn.disabled=true; btn.textContent='⏳ Enviando...';
+  btn.disabled=true; btn.textContent='⏳ Salvando...';
+
   const { data: sess } = await sb.auth.getSession();
-  const body = {
-    cnpj: emp.cnpj, razao_social: emp.razao_social, nome_fantasia: emp.nome_fantasia,
-    inscricao_estadual: emp.inscricao_estadual, inscricao_municipal: emp.inscricao_municipal,
-    regime_tributario: emp.regime_tributario||'1',
-    cep: emp.cep, logradouro: emp.logradouro, numero: emp.numero, complemento: emp.complemento,
-    bairro: emp.bairro, municipio: emp.municipio, codigo_municipio_ibge: emp.codigo_municipio_ibge,
-    uf: emp.uf, telefone: emp.telefone, email: emp.email,
-    ambiente: document.getElementById('nf-ambiente').value,
+  const token = sess?.session?.access_token;
+
+  // 1) Salva configurações na empresa fiscal
+  const cfgBody = {
+    ambiente:    document.getElementById('nf-ambiente').value,
+    serie_nfe:   document.getElementById('nf-serie-nfe').value.padStart(3,'0'),
+    serie_nfce:  document.getElementById('nf-serie-nfce').value.padStart(3,'0'),
+    csc_id:      document.getElementById('nf-csc-id').value.trim(),
+    csc:         document.getElementById('nf-csc').value.trim(),
+    tipo_emissao:'direta',
   };
+  await sb.from('empresas_fiscais').upsert({ user_id: currentUser.id, cnpj: emp.cnpj.replace(/\D/g,''),
+    razao_social: emp.razao_social, inscricao_estadual: emp.inscricao_estadual||'',
+    ...cfgBody }, { onConflict:'user_id' });
+
+  // 2) Envia certificado (se fornecido)
   if (certFile) {
-    body.certificado_base64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(certFile); });
-    body.senha_certificado = senha;
+    const pfx_base64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(certFile); });
+    const certResp = await fetch(SUPABASE_URL+'/functions/v1/sefaz-cert', {
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({ pfx_base64, senha })
+    });
+    const certData = await certResp.json().catch(()=>({}));
+    if (!certResp.ok) {
+      showToast('Erro no certificado: '+(certData.erro||'falha'), 'error');
+      btn.disabled=false; btn.textContent='💾 Salvar Configurações';
+      return;
+    }
+    window._temCertificado = true;
+    showToast(`✅ Certificado salvo! ${certData.cn||''} — válido até ${certData.validade||'?'}`, 'success');
+  } else {
+    showToast('✅ Configurações salvas!', 'success');
   }
-  const resp = await fetch(SUPABASE_URL+'/functions/v1/cadastrar-empresa-fiscal', {
-    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess?.session?.access_token},
-    body: JSON.stringify(body)
-  });
-  const data = await resp.json().catch(()=>({}));
-  if (!resp.ok) { showToast('Erro: '+(data.erro||'falha'), 'error'); btn.disabled=false; btn.textContent='💾 Salvar e Habilitar'; return; }
   closeModal();
-  showToast('✅ Empresa habilitada para emissão de NF-e/NFC-e!','success');
   navigate('emissao-nf');
 }
 
 function abrirEmitirNF(vendaId) {
   document.getElementById('modal-body').innerHTML = `
-    <h3>📄 Emitir Documento Fiscal</h3>
+    <h3>📄 Emitir Documento Fiscal — SEFAZ Direta</h3>
     <p style="font-size:13px;color:var(--gray-600);margin-bottom:20px">Escolha o tipo de nota para esta venda:</p>
     <div style="display:flex;gap:12px">
       <button class="btn btn-primary" style="flex:1;padding:18px;display:flex;flex-direction:column;align-items:center;gap:6px" onclick="emitirNF('${vendaId}','nfce')">
@@ -7173,32 +7250,112 @@ function abrirEmitirNF(vendaId) {
 }
 
 async function emitirNF(vendaId, tipo) {
-  document.getElementById('modal-body').innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div><p style="margin-top:14px;color:var(--gray-400)">Enviando ${tipo==='nfce'?'NFC-e':'NF-e'} para a SEFAZ…</p></div>`;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="empty-state">
+      <div class="spinner" style="margin:0 auto"></div>
+      <p style="margin-top:14px;color:var(--gray-400)">Gerando, assinando e enviando ${tipo==='nfce'?'NFC-e':'NF-e'} diretamente para a SEFAZ…<br><small>Isso pode levar alguns segundos.</small></p>
+    </div>`;
   const { data: sess } = await sb.auth.getSession();
-  const resp = await fetch(SUPABASE_URL+'/functions/v1/emitir-nota', {
+  const resp = await fetch(SUPABASE_URL+'/functions/v1/sefaz-autorizar', {
     method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess?.session?.access_token},
     body: JSON.stringify({ venda_id: vendaId, tipo })
   });
   const data = await resp.json().catch(()=>({}));
   closeModal();
   if (!resp.ok) {
-    const extra = data.campos_faltando ? ` (faltam: ${data.campos_faltando.join(', ')})` : (data.produtos?` (sem NCM: ${data.produtos.join(', ')})`:'');
+    const extra = data.campos_faltando?` (faltam: ${data.campos_faltando.join(', ')})`:(data.produtos?` (sem NCM: ${data.produtos.join(', ')})`:' ');
     showToast('Erro: '+(data.erro||'falha')+extra, 'error');
     return;
   }
-  showToast('✅ Nota enviada! Aguarde a autorização da SEFAZ.','success');
+  showToast(`✅ ${tipo.toUpperCase()} autorizada pela SEFAZ! Nº ${data.numero} — Protocolo ${data.protocolo}`, 'success');
   navigate('emissao-nf');
 }
 
-async function consultarNF(ref) {
-  showToast('🔄 Consultando SEFAZ...','success');
+async function consultarNF(notaId) {
+  // Recarrega apenas a linha da nota no banco (status já foi salvo pela Edge Function)
+  showToast('🔄 Atualizando status...','success');
+  navigate('emissao-nf');
+}
+
+async function cancelarNF(notaId, justificativa) {
   const { data: sess } = await sb.auth.getSession();
-  const resp = await fetch(SUPABASE_URL+'/functions/v1/gerenciar-nota', {
+  const resp = await fetch(SUPABASE_URL+'/functions/v1/sefaz-cancelar', {
     method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess?.session?.access_token},
-    body: JSON.stringify({ acao:'consultar', ref })
+    body: JSON.stringify({ nota_id: notaId, justificativa })
   });
-  if (!resp.ok) { showToast('Erro ao consultar','error'); return; }
-  showToast('Status atualizado!','success');
+  const data = await resp.json().catch(()=>({}));
+  closeModal();
+  if (!resp.ok) { showToast('Erro ao cancelar: '+(data.erro||''), 'error'); return; }
+  showToast('✅ Nota cancelada na SEFAZ!', 'success');
+  navigate('emissao-nf');
+}
+
+function abrirCancelarNF(notaId) {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>🚫 Cancelar Nota Fiscal</h3>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:8px">O cancelamento é <strong>irreversível</strong> e só é aceito pela SEFAZ em até 24h após a autorização (NFC-e) ou 7 dias (NF-e).</p>
+    <div class="form-group" style="margin-top:12px">
+      <label>Justificativa (mínimo 15 caracteres)</label>
+      <input type="text" id="cancel-just" placeholder="Motivo do cancelamento...">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Voltar</button>
+      <button class="btn btn-danger" onclick="confirmarCancelNF('${notaId}')">🚫 Confirmar Cancelamento</button>
+    </div>`;
+  openModal();
+}
+
+function confirmarCancelNF(notaId) {
+  const just = document.getElementById('cancel-just').value.trim();
+  if (just.length < 15) { showToast('Justificativa precisa ter ao menos 15 caracteres','error'); return; }
+  cancelarNF(notaId, just);
+}
+
+function abrirInutilizarNF() {
+  document.getElementById('modal-body').innerHTML = `
+    <h3>🗑 Inutilizar Numeração</h3>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:16px">Use quando houver lacuna na numeração (ex: sistema caiu, notas não emitidas). A SEFAZ vai registrar esses números como inutilizados.</p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Modelo</label>
+        <select id="inut-modelo">
+          <option value="55">NF-e (55)</option>
+          <option value="65">NFC-e (65)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Série</label><input type="text" id="inut-serie" value="001" maxlength="3"></div>
+      <div class="form-group"><label>Número Inicial</label><input type="number" id="inut-ini" placeholder="1" min="1"></div>
+      <div class="form-group"><label>Número Final</label><input type="number" id="inut-fin" placeholder="1" min="1"></div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Justificativa (mín. 15 caracteres)</label>
+        <input type="text" id="inut-just" placeholder="Ex: Erro no sistema, numeração não utilizada">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarInutilizarNF()">🗑 Inutilizar na SEFAZ</button>
+    </div>`;
+  openModal();
+}
+
+async function confirmarInutilizarNF() {
+  const modelo = document.getElementById('inut-modelo').value;
+  const serie  = document.getElementById('inut-serie').value.padStart(3,'0');
+  const nro_ini = Number(document.getElementById('inut-ini').value);
+  const nro_fin = Number(document.getElementById('inut-fin').value);
+  const just    = document.getElementById('inut-just').value.trim();
+  if (!nro_ini || !nro_fin || just.length < 15) { showToast('Preencha todos os campos corretamente','error'); return; }
+  if (nro_fin < nro_ini) { showToast('Número final deve ser >= número inicial','error'); return; }
+
+  const { data: sess } = await sb.auth.getSession();
+  const resp = await fetch(SUPABASE_URL+'/functions/v1/sefaz-inutilizar', {
+    method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+sess?.session?.access_token},
+    body: JSON.stringify({ modelo, serie, nro_ini, nro_fin, justificativa: just })
+  });
+  const data = await resp.json().catch(()=>({}));
+  closeModal();
+  if (!resp.ok) { showToast('Erro: '+(data.erro||''), 'error'); return; }
+  showToast(`✅ Números ${nro_ini}–${nro_fin} inutilizados na SEFAZ!`, 'success');
   navigate('emissao-nf');
 }
 
