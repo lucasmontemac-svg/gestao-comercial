@@ -3622,10 +3622,11 @@ async function concretizarVenda(dados) {
   const valorBase = total; // preço dos produtos com desconto (o que o lojista deveria receber)
   let valorBruto = valorBase;
   let valorLiquido = valorBase; // receita real após taxas
+  let repassarTaxa = false; // declarado aqui para estar disponível no INSERT independente da forma de pagamento
 
   if (dados.formaPgto === 'Cartão') {
     // Cartão puro
-    const repassarTaxa = window._cartaoRepassar || false;
+    repassarTaxa = window._cartaoRepassar || false;
     valorBruto = repassarTaxa ? (window._cartaoValorCobrado || valorBase) : valorBase;
     // Com repasse: cliente pagou a taxa, lojista recebe valorBase inteiro
     // Sem repasse: lojista arca com a taxa, recebe valorBruto*(1-taxa%)
